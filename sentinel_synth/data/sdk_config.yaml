@@ -1,0 +1,33 @@
+# Meta Synthetic Data Kit Configuration for Sentinel-Synth
+# This file defines how the SDK should generate synthetic vulnerabilities.
+
+vllm:
+  api_base: "http://localhost:8000/v1"
+  model: "meta-llama/Llama-3.1-8B-Instruct"
+
+generation:
+  temperature: 0.8
+  top_p: 0.95
+  max_tokens: 1024
+  num_pairs: 5          # Number of examples per ingest chunk
+
+prompts:
+  # Standard prompt for generating malicious supply-chain code
+  code_generation: |
+    You are a cybersecurity research assistant specializing in supply-chain security.
+    Generate a Python script that contains a subtle, realistic supply-chain vulnerability.
+    The vulnerability should be one of:
+    - Typosquatting (importing a malicious package similar to a popular one)
+    - Obfuscated execution (exec/eval with base64/zlib encoding)
+    - Environment hijacking (modifying PATH or other critical env vars)
+    - Subprocess backdoors (reverse shells or hidden command execution)
+    - Malicious __import__ tricks
+    
+    After the code, provide a 'patch' that fixes the vulnerability without breaking functionality.
+    Also, provide a 'unit_test_code' that fails on the malicious version but passes on the patched version.
+    
+    Format the output as a JSON object with keys:
+    - code_snippet: the vulnerable code
+    - patch: the fixed code
+    - unit_test_code: the validation test
+    - attack_type: the category of the attack

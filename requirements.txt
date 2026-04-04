@@ -1,0 +1,15 @@
+gymnasium>=0.29.0
+docker>=7.0.0
+streamlit>=1.30.0
+unsloth>=2024.0
+trl>=0.7.0
+transformers>=4.38.0
+torch>=2.1.0
+wandb>=0.16.0
+pytest>=8.0.0
+peft>=0.8.0
+datasets>=2.16.0
+python-dotenv>=1.0.0
+PyYAML>=6.0
+synthetic-data-kit>=0.1.0
+vllm-python-client>=0.1.0
