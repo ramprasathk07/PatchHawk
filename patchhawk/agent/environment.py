@@ -167,8 +167,13 @@ class PatchHawkEnv(
         if seed is not None:
             random.seed(seed)
 
+        # Check for direct scenario override (used by GRPO training)
+        scenario_override = kwargs.get("scenario")
+
         # Pick scenario
-        if not self.scenarios:
+        if scenario_override:
+            self.current_scenario = scenario_override
+        elif not self.scenarios:
             self.current_scenario = {
                 "id": "fallback",
                 "type": "functional",
