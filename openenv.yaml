@@ -1,0 +1,23 @@
+name: PatchHawk
+version: 1.0.0
+description: Detect and patch supply-chain vulnerabilities in Python code.
+tags: [security, supply-chain, code-review, llm-agent]
+tasks:
+  - id: easy_typosquat
+    name: Detect typosquatting import
+    description: Identify a malicious import like 'pythonn' instead of 'python'
+    difficulty: easy
+    grader: patchhawk.tasks:grade_easy
+    max_steps: 5
+  - id: medium_obfuscated
+    name: Identify obfuscated backdoor
+    description: Find base64-encoded exec backdoor
+    difficulty: medium
+    grader: patchhawk.tasks:grade_medium
+    max_steps: 5
+  - id: hard_patch
+    name: Generate and validate a patch
+    description: Submit a working patch that removes vulnerability and passes tests
+    difficulty: hard
+    grader: patchhawk.tasks:grade_hard
+    max_steps: 8
