@@ -349,6 +349,125 @@ def generate_track_a_scenarios_with_sdk(output_dir: str, num_samples: int = 10) 
 
 
 # ============================================================
+# Track HF – Hugging Face dataset loader (optional)
+# ============================================================
+
+
+def generate_track_hf_scenarios(
+    hf_dataset_id: str,
+    split: str = "train",
+    text_field: str = "code",
+    num_samples: int = 0,
+    only_python: bool = False,
+) -> list:
+    """
+    Load snippets from a Hugging Face dataset and return scenario dicts.
+    - `hf_dataset_id`: e.g. "username/repo" or a dataset id on the Hub
+    - `text_field`: field name in dataset containing the code/snippet
+    - `num_samples`: 0 => load entire split, otherwise limit
+    """
+    hf_scenarios: list = []
+
+    try:
+        from datasets import load_dataset
+    except Exception as e:
+        print(f"⚠️  Install `datasets` (pip install datasets). Error: {e}")
+        return hf_scenarios
+
+    try:
+        # If a local path is provided, prefer local loading:
+        p = Path(hf_dataset_id)
+        if p.exists():
+            # Saved dataset directory created by `save_to_disk`
+            if p.is_dir():
+                try:
+                    from datasets import load_from_disk
+
+                    ds = load_from_disk(str(p))
+                except Exception:
+                    # Fall back to loading as files inside the dir
+                    ds = load_dataset("json", data_files=str(p / "*.jsonl"))
+            else:
+                # Single file: jsonl / json / ndjson or plain text
+                if p.suffix.lower() in (".jsonl", ".json", ".ndjson"):
+                    ds = load_dataset("json", data_files=str(p))
+                else:
+                    # Treat as plain text file, one example per line
+                    with open(p, "r", encoding="utf-8") as fh:
+                        lines = [l.rstrip("\n") for l in fh if l.strip()]
+                    # create a dataset from python list
+                    from datasets import Dataset
+
+                    ds = Dataset.from_dict({"text": lines})
+        else:
+            ds = load_dataset(hf_dataset_id, split=split)
+    except Exception as e:
+        print(f"⚠️  Could not load HF dataset {hf_dataset_id}: {e}")
+        return hf_scenarios
+
+    # optionally limit
+    try:
+        total = len(ds)
+    except Exception:
+        total = None
+
+    if num_samples and num_samples > 0 and total:
+        num = min(num_samples, total)
+        try:
+            ds = ds.select(range(num))
+        except Exception:
+            pass
+
+    # iterate over dataset rows
+    for item in ds:
+        code = None
+        unit_test = "import code\nassert True"
+
+        if isinstance(item, dict):
+            # optional language filter
+            if only_python:
+                lang = (item.get("lang") or item.get("language") or "").lower()
+                if lang and lang != "python":
+                    continue
+
+            # prefer accepted/chosen field when present (e.g., 'chosen')
+            for k in ("chosen", text_field, "code", "snippet", "text"):
+                if k in item and item[k]:
+                    code = item[k]
+                    break
+
+            # best-effort unit test / label / patch extraction
+            unit_test = item.get("unit_test_code", unit_test)
+            label = item.get("label") or item.get("classification") or "benign"
+            patch = item.get("patch")
+            attack_type = item.get("vulnerability") or item.get("attack_type")
+        else:
+            # plain examples (no fields)
+            code = str(item)
+            label = "benign"
+            patch = None
+            attack_type = None
+
+        if not code:
+            continue
+
+        hf_scenarios.append(
+            {
+                "id": f"hf_{uuid.uuid4().hex[:8]}",
+                "type": "true_positive" if patch or (isinstance(label, str) and label.lower() in ("malicious", "vuln", "vulnerable")) else "functional",
+                "code_snippet": code,
+                "patch": patch,
+                "unit_test_code": unit_test,
+                "label": "malicious" if (patch or (isinstance(label, str) and label.lower() in ("malicious", "vuln", "vulnerable"))) else "benign",
+                "source": "huggingface_dataset",
+                "attack_type": attack_type,
+            }
+        )
+
+    return hf_scenarios
+
+
+# ============================================================
 # CLI entry point
 # ============================================================
 
@@ -378,6 +497,36 @@ def main():
         default=10,
         help="Number of SDK samples to generate",
     )
+    parser.add_argument(
+        "--hf-dataset",
+        type=str,
+        default=None,
+        help="HuggingFace dataset id (e.g., username/repo) to import snippets from",
+    )
+    parser.add_argument(
+        "--hf-split",
+        type=str,
+        default="train",
+        help="Split name to load from the HF dataset",
+    )
+    parser.add_argument(
+        "--hf-field",
+        type=str,
+        default="code",
+        help="Field name in HF dataset that contains the code/snippet",
+    )
+    parser.add_argument(
+        "--hf-samples",
+        type=int,
+        default=0,
+        help="Number of HF samples to use (0 = all)",
+    )
+    parser.add_argument(
+        "--hf-only-python",
+        action="store_true",
+        default=False,
+        help="If set, only include HF examples where language/lang == python",
+    )
     args = parser.parse_args()
 
     benign_files = load_benign_files(args.benign_dir)
@@ -396,6 +545,19 @@ def main():
         scenarios.extend(sdk)
         if sdk:
             print(f"Added {len(sdk)} SDK-generated scenarios.")
+
+    # Track HF (optional)
+    if getattr(args, "hf_dataset", None):
+        hf = generate_track_hf_scenarios(
+            args.hf_dataset,
+            args.hf_split,
+            args.hf_field,
+            args.hf_samples,
+            args.hf_only_python,
+        )
+        scenarios.extend(hf)
+        if hf:
+            print(f"Added {len(hf)} HuggingFace scenarios.")
 
     random.shuffle(scenarios)
     os.makedirs(os.path.dirname(args.output), exist_ok=True)
