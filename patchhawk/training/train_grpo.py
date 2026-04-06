@@ -1,11 +1,14 @@
+#!/usr/bin/env python3
 """
 GRPO training pipeline for PatchHawk (trl 1.0.0, RTX 3060 12GB).
 
-Fixed:
-- Removed max_prompt_length / max_completion_length (unsupported in trl 1.0.0).
-- Disabled fp16 in GRPOConfig to avoid BFloat16 AMP error.
+Fixed for trl 1.0.0:
+- Removed max_prompt_length / max_completion_length.
+- Disabled fp16 to avoid BFloat16 AMP error.
 - Set tokenizer.model_max_length for sequence length control.
-- Added custom callback to show loss in progress bar.
+- Forced WandB logging every step via custom callback (no step argument to avoid warnings).
+- Loss displayed in tqdm progress bar.
+- WandB online mode forced before init.
 """
 
 import argparse
@@ -36,6 +39,7 @@ def _build_prompt(scenario: dict) -> str:
 
 
 def train_agent(args):
+    # Check trl availability
     if not args.dry_run:
         try:
             from trl import GRPOTrainer, GRPOConfig
@@ -44,11 +48,19 @@ def train_agent(args):
                 "trl not found.\nInstall: pip install trl==1.0.0 peft bitsandbytes accelerate transformers"
             ) from exc
 
+    # ── WandB initialisation (force online mode before init) ──
     if not args.dry_run and wandb is not None:
-        wandb.init(project="patchhawk", name="grpo-run", config=vars(args))
+        os.environ["WANDB_MODE"] = "online"
+        os.environ["WANDB_SILENT"] = "false"
+        wandb.init(
+            project="patchhawk",
+            name="grpo-run",
+            config=vars(args),
+        )
     else:
         print("[INFO] WandB skipped.")
 
+    # ── Environment ──────────────────────────────────────────
     from patchhawk.agent.environment import PatchHawkEnv
 
     env = PatchHawkEnv(
@@ -61,6 +73,7 @@ def train_agent(args):
         _dry_run_training(env, args)
         return
 
+    # ── GPU training imports ─────────────────────────────────
     import torch
     from transformers import (
         AutoModelForCausalLM,
@@ -68,12 +81,7 @@ def train_agent(args):
         BitsAndBytesConfig,
         TrainerCallback,
     )
-    from peft import (
-        LoraConfig,
-        TaskType,
-        get_peft_model,
-        prepare_model_for_kbit_training,
-    )
+    from peft import LoraConfig, TaskType, get_peft_model, prepare_model_for_kbit_training
     from datasets import Dataset
     from trl import GRPOConfig, GRPOTrainer
 
@@ -84,6 +92,7 @@ def train_agent(args):
 
     MODEL_NAME = "Qwen/Qwen2.5-Coder-3B-Instruct"
 
+    # 4‑bit quantisation config
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
@@ -97,7 +106,7 @@ def train_agent(args):
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
 
-    # Set maximum total sequence length (prompt + generation)
+    # Critical: set total sequence length (prompt + generation)
     tokenizer.model_max_length = args.max_seq_len
 
     base_model = AutoModelForCausalLM.from_pretrained(
@@ -113,6 +122,7 @@ def train_agent(args):
         use_gradient_checkpointing=True,
     )
 
+    # LoRA configuration
     lora_config = LoraConfig(
         task_type=TaskType.CAUSAL_LM,
         r=16,
@@ -120,19 +130,14 @@ def train_agent(args):
         lora_dropout=0.05,
         bias="none",
         target_modules=[
-            "q_proj",
-            "k_proj",
-            "v_proj",
-            "o_proj",
-            "gate_proj",
-            "up_proj",
-            "down_proj",
+            "q_proj", "k_proj", "v_proj", "o_proj",
+            "gate_proj", "up_proj", "down_proj",
         ],
     )
     model = get_peft_model(base_model, lora_config)
     model.print_trainable_parameters()
 
-    # Reward 1: format (trl 1.0.0 expects completions as list of strings)
+    # ── Reward 1: XML format ─────────────────────────────────
     def format_reward(completions, **kwargs):
         rewards = []
         for c in completions:
@@ -154,7 +159,7 @@ def train_agent(args):
             rewards.append(score)
         return rewards
 
-    # Reward 2: environment
+    # ── Reward 2: environment feedback ───────────────────────
     from patchhawk.env_models import PatchHawkAction
 
     def env_reward(completions, prompts, **kwargs):
@@ -162,10 +167,8 @@ def train_agent(args):
         for prompt, c in zip(prompts, completions):
             text = c if isinstance(c, str) else str(c)
 
-            # Find scenario by code snippet in prompt
-            code_match = re.search(
-                r"<code_snippet>(.*?)</code_snippet>", prompt, re.DOTALL
-            )
+            # Extract code snippet from prompt to identify scenario
+            code_match = re.search(r"<code_snippet>(.*?)</code_snippet>", prompt, re.DOTALL)
             if not code_match:
                 rewards.append(-2.0)
                 continue
@@ -179,30 +182,30 @@ def train_agent(args):
                 rewards.append(-2.0)
                 continue
 
+            # Parse action
             action_match = re.search(r"<action>(\d+)</action>", text)
             if not action_match:
                 rewards.append(-2.0)
                 continue
             action_type = int(action_match.group(1))
 
+            # Parse patch (if any)
             patch = None
             patch_match = re.search(r"<patch>(.*?)</patch>", text, re.DOTALL)
             if patch_match:
                 patch = patch_match.group(1).strip()
 
             try:
-                # Reset environment to the specific scenario
+                # Reset environment to the exact scenario
                 env.reset(scenario_idx=env.scenarios.index(scenario))
-                obs = env.step(
-                    PatchHawkAction(action_type=action_type, patch_content=patch)
-                )
+                obs = env.step(PatchHawkAction(action_type=action_type, patch_content=patch))
                 rewards.append(float(obs.reward or 0.0))
             except Exception as exc:
                 print(f"env_reward crash: {exc}")
                 rewards.append(-3.0)
         return rewards
 
-    # Prepare dataset
+    # ── Dataset preparation ──────────────────────────────────
     valid = [s for s in env.scenarios if s.get("label") in ("malicious", "benign")]
     random.seed(42)
     random.shuffle(valid)
@@ -212,32 +215,43 @@ def train_agent(args):
     eval_ds = Dataset.from_list([{"prompt": _build_prompt(s)} for s in valid[split:]])
     print(f"Dataset — train: {len(train_ds)}, eval: {len(eval_ds)}")
 
-    # GRPOConfig – no max_prompt_length, no fp16, logging_steps=1 for frequent loss updates
+    # ── GRPO Config (trl 1.0.0 compatible) ───────────────────
     grpo_config = GRPOConfig(
         output_dir=args.output_dir,
         learning_rate=args.learning_rate,
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=args.grad_accum,
-        fp16=False,  # FIX: disable mixed precision
+        fp16=False,                     # avoids BFloat16 AMP error
         gradient_checkpointing=True,
         num_generations=args.group_size,
         beta=args.kl_coef,
         num_train_epochs=args.epochs,
         warmup_steps=10,
         max_grad_norm=1.0,
-        logging_steps=1,  # ← log loss every step
+        logging_steps=1,                # log every step
+        logging_first_step=True,        # log step 0 immediately
         save_steps=50,
         report_to="wandb" if (wandb is not None and not args.dry_run) else "none",
     )
 
-    # ─────────────────────────────────────────────────────────
-    # Custom callback to show loss in the tqdm progress bar
-    # ─────────────────────────────────────────────────────────
-    class LossProgressBarCallback(TrainerCallback):
+    # ── Custom callback: force WandB logging + progress bar (no step warnings) ──
+    class ForceWandbCallback(TrainerCallback):
         def on_log(self, args, state, control, logs=None, **kwargs):
-            if logs and "loss" in logs:
-                if hasattr(state, "progress_bar"):
-                    state.progress_bar.set_postfix({"loss": f"{logs['loss']:.4f}"})
+            if not logs:
+                return
+            # Log everything to wandb WITHOUT step argument (avoids step warnings)
+            if wandb is not None and wandb.run is not None:
+                wandb.log(logs)
+            # Update progress bar with loss
+            loss_key = None
+            for key in ["loss", "grpo_loss", "train_loss"]:
+                if key in logs:
+                    loss_key = key
+                    break
+            if loss_key is not None:
+                loss_val = logs[loss_key]
+                if hasattr(state, "progress_bar") and state.progress_bar is not None:
+                    state.progress_bar.set_postfix({loss_key: f"{loss_val:.4f}"})
 
     trainer = GRPOTrainer(
         model=model,
@@ -246,21 +260,23 @@ def train_agent(args):
         train_dataset=train_ds,
         eval_dataset=eval_ds,
     )
-
-    # Add the callback
-    trainer.add_callback(LossProgressBarCallback())
+    trainer.add_callback(ForceWandbCallback())
 
     print("Starting GRPO training ...")
     trainer.train()
 
-    # Save adapter
+    # Ensure all pending logs are sent to wandb
+    if wandb is not None and wandb.run is not None:
+        wandb.finish()
+
+    # ── Save LoRA adapter ────────────────────────────────────
     out = Path(args.output_dir)
     out.mkdir(parents=True, exist_ok=True)
     model.save_pretrained(str(out))
     tokenizer.save_pretrained(str(out))
     print(f"LoRA adapter saved to {out}")
 
-    # Optional HF Hub upload
+    # ── Optional HF Hub upload ───────────────────────────────
     hf_repo = os.getenv("HF_REPO", "")
     if hf_repo:
         try:
@@ -271,8 +287,10 @@ def train_agent(args):
             print(f"HF upload failed: {exc}")
 
 
+# ─────────────────────────────────────────────────────────────
+# Dry-run (CPU simulation, no model)
+# ─────────────────────────────────────────────────────────────
 def _dry_run_training(env, args):
-    # ... (unchanged, keep as in your original)
     print("[DRY RUN] CPU simulation only — no model loaded.\n")
     from patchhawk.env_models import PatchHawkAction
 
@@ -305,18 +323,14 @@ def _dry_run_training(env, args):
                 atype = env.current_scenario.get("attack_type", "none") or "none"
                 attack_success.setdefault(atype, {"correct": 0, "total": 0})
                 attack_success[atype]["total"] += 1
-                if (label == "malicious" and ep_reward > 0) or (
-                    label == "benign" and ep_reward >= 0
-                ):
+                if (label == "malicious" and ep_reward > 0) or (label == "benign" and ep_reward >= 0):
                     attack_success[atype]["correct"] += 1
 
             mean_r = float(np.mean(group_rewards))
             std_r = float(np.std(group_rewards)) + 1e-8
             advantages = [(r - mean_r) / std_r for r in group_rewards]
             epoch_rewards.append(mean_r)
-            print(
-                f"  Batch mean_reward={mean_r:+.2f}  advantages={[f'{a:+.2f}' for a in advantages]}"
-            )
+            print(f"  Batch mean_reward={mean_r:+.2f}  advantages={[f'{a:+.2f}' for a in advantages]}")
 
         epoch_mean = float(np.mean(epoch_rewards)) if epoch_rewards else 0.0
         print(f"  Epoch {epoch + 1} mean_reward: {epoch_mean:+.2f}")
@@ -332,32 +346,26 @@ def _dry_run_training(env, args):
                     "loss": max(0.0, 1.0 - epoch_mean / 3.0),
                 }
                 for atype, counts in attack_success.items():
-                    log_data[f"success_rate/{atype}"] = counts["correct"] / max(
-                        counts["total"], 1
-                    )
+                    log_data[f"success_rate/{atype}"] = counts["correct"] / max(counts["total"], 1)
                 wandb.log(log_data)
             except Exception:
                 pass
 
     out = Path(args.output_dir)
     out.mkdir(parents=True, exist_ok=True)
-    (out / "adapter_config.json").write_text('{"model_type":"patchhawk-grpo-null-baseline"}')
+    (out / "adapter_config.json").write_text('{"model_type":"patchhawk-grpo-dry-run"}')
     (out / "adapter_model.bin").write_bytes(b"\x00" * 64)
-    print(f"\n[DRY RUN] Baseline constraint adapter written to {args.output_dir}/")
+    print(f"\n[DRY RUN] Dummy adapter written to {args.output_dir}/")
 
 
+# ─────────────────────────────────────────────────────────────
+# CLI entry point
+# ─────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="PatchHawk GRPO Training (trl 1.0.0)")
-    parser.add_argument(
-        "--dry-run", action="store_true", help="CPU simulation, no model"
-    )
+    parser.add_argument("--dry-run", action="store_true", help="CPU simulation, no model")
     parser.add_argument("--use-docker", action="store_true", help="Use Docker sandbox")
-    parser.add_argument(
-        "--max-seq-len",
-        type=int,
-        default=1024,
-        help="Total sequence length (prompt+completion)",
-    )
+    parser.add_argument("--max-seq-len", type=int, default=1024, help="Total sequence length (prompt+completion)")
     parser.add_argument("--learning-rate", type=float, default=5e-6)
     parser.add_argument("--kl-coef", type=float, default=0.01)
     parser.add_argument("--batch-size", type=int, default=1)
