@@ -45,20 +45,25 @@ def run_code(
     try:
         if use_docker:
             cmd = [
-                "docker", "run", "--rm",
-                "--network", "none",
-                "--memory", "256m",
-                "--cpus", "0.5",
-                "-v", f"{temp_dir}:/app:rw",
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--memory",
+                "256m",
+                "--cpus",
+                "0.5",
+                "-v",
+                f"{temp_dir}:/app:rw",
                 "patchhawk-sandbox:latest",
-                "python", "/app/script.py",
+                "python",
+                "/app/script.py",
             ]
         else:
             cmd = ["python3", script_path]
 
-        proc = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=timeout_sec
-        )
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_sec)
         result["stdout"] = proc.stdout
         result["stderr"] = proc.stderr
         result["exit_code"] = proc.returncode
@@ -92,13 +97,22 @@ def check_syntax(
     try:
         if use_docker:
             cmd = [
-                "docker", "run", "--rm",
-                "--network", "none",
-                "--memory", "256m",
-                "--cpus", "0.5",
-                "-v", f"{temp_dir}:/app:ro",
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--memory",
+                "256m",
+                "--cpus",
+                "0.5",
+                "-v",
+                f"{temp_dir}:/app:ro",
                 "patchhawk-sandbox:latest",
-                "python", "-m", "py_compile", "/app/script.py",
+                "python",
+                "-m",
+                "py_compile",
+                "/app/script.py",
             ]
         else:
             cmd = ["python3", "-m", "py_compile", script_path]
@@ -166,20 +180,20 @@ def validate_patch(
     # Stage 3 – Re-attack verification
     # ------------------------------------------------------------------
     if scenario.get("type") == "true_positive" and scenario.get("attack_type"):
-        attack_res = run_code(scenario["code_snippet"], timeout_sec=5, use_docker=use_docker)
+        attack_res = run_code(
+            scenario["code_snippet"], timeout_sec=5, use_docker=use_docker
+        )
         patch_res = run_code(patch_code, timeout_sec=5, use_docker=use_docker)
 
         vulnerability_remains = False
 
         # Check file-write side-effects
-        if (
-            len(attack_res.get("file_writes", [])) > 0
-            and len(patch_res.get("file_writes", []))
-            >= len(attack_res.get("file_writes", []))
-        ):
+        if len(attack_res.get("file_writes", [])) > 0 and len(
+            patch_res.get("file_writes", [])
+        ) >= len(attack_res.get("file_writes", [])):
             vulnerability_remains = True
 
-        # Attack-type-specific heuristics
+        # Isolate and match syntax tree against domain-specific threat heuristics
         attack_type = scenario["attack_type"]
         if attack_type == "typosquatting":
             if "pythonn" in patch_res.get("stderr", ""):

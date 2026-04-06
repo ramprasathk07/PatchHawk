@@ -15,6 +15,7 @@ def env():
 
 # ── Basic API ─────────────────────────────────────────────────────
 
+
 def test_reset_returns_observation(env):
     """reset() returns a PatchHawkObservation (OpenEnv API)."""
     obs = env.reset()
@@ -68,6 +69,7 @@ def test_all_action_types_accepted(env):
 
 
 # ── Reward logic ──────────────────────────────────────────────────
+
 
 def test_block_malicious_positive_reward(env):
     malicious = [s for s in env.scenarios if s.get("label") == "malicious"]

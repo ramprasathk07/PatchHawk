@@ -58,9 +58,7 @@ def grade_medium(
     if not trajectory:
         return 0.0
 
-    used_sandbox = any(
-        a.action_type == _EXECUTE_SANDBOX for a, _o in trajectory
-    )
+    used_sandbox = any(a.action_type == _EXECUTE_SANDBOX for a, _o in trajectory)
     last_action, _last_obs = trajectory[-1]
     scenario = env.current_scenario or {}
 
@@ -88,9 +86,6 @@ def grade_hard(
 
     last_action, _last_obs = trajectory[-1]
 
-    if (
-        last_action.action_type == _SUBMIT_PATCH
-        and env.state.patch_validated
-    ):
+    if last_action.action_type == _SUBMIT_PATCH and env.state.patch_validated:
         return 1.0
     return 0.0

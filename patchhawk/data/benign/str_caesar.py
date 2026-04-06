@@ -3,7 +3,7 @@ def caesar_cipher(text, shift):
     result = ""
     for char in text:
         if char.isalpha():
-            start = ord('a') if char.islower() else ord('A')
+            start = ord("a") if char.islower() else ord("A")
             result += chr((ord(char) - start + shift) % 26 + start)
         else:
             result += char

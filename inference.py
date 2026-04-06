@@ -12,7 +12,7 @@ Environment variables:
 
 Usage:
     python inference.py                 # run all tasks via LLM
-    DRY_RUN=1 python inference.py       # dry-run with dummy actions
+    DRY_RUN=1 python inference.py       # dry-run with static mock actions
     TASK=easy_typosquat python inference.py
 """
 
@@ -30,7 +30,9 @@ from patchhawk import tasks as graders
 
 # ── Configuration ────────────────────────────────────────────────────
 
-API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/hf-inference/v1")
+API_BASE_URL = os.getenv(
+    "API_BASE_URL", "https://router.huggingface.co/hf-inference/v1"
+)
 MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-Coder-32B-Instruct")
 HF_TOKEN = os.getenv("HF_TOKEN", "")
 DRY_RUN = os.getenv("DRY_RUN", "0") == "1"
@@ -86,6 +88,7 @@ def _build_user_prompt(obs: PatchHawkObservation, step: int) -> str:
 
 # ── LLM caller ───────────────────────────────────────────────────────
 
+
 def _call_llm(messages: list[dict]) -> str:
     """Call the OpenAI-compatible LLM and return the text content."""
     from openai import OpenAI
@@ -122,6 +125,7 @@ def _parse_action(text: str) -> PatchHawkAction:
 
 # ── Episode runner ───────────────────────────────────────────────────
 
+
 def run_episode(
     env: PatchHawkEnv,
     task_id: str,
@@ -155,7 +159,7 @@ def run_episode(
                 action = _parse_action(llm_text)
             except Exception as exc:
                 error = str(exc)
-                # Fallback to BLOCK_PR on parse failure
+                # Apply conservative BLOCK_PR constraint on malformed LLM responses
                 action = PatchHawkAction(action_type=PatchHawkEnv.ACTION_BLOCK_PR)
 
         # ── Step ─────────────────────────────────────────────────
@@ -199,6 +203,7 @@ def run_episode(
 
 # ── Main ─────────────────────────────────────────────────────────────
 
+
 def main():
     env = PatchHawkEnv(use_docker=False)
 
@@ -228,7 +233,9 @@ def main():
     # Summary
     print("\n=== Summary ===")
     for r in results:
-        print(f"  {r['task_id']}: success={r.get('success')} score={r.get('score', 'N/A')}")
+        print(
+            f"  {r['task_id']}: success={r.get('success')} score={r.get('score', 'N/A')}"
+        )
 
 
 if __name__ == "__main__":

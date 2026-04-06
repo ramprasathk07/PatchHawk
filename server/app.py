@@ -34,9 +34,7 @@ from patchhawk.env_models import PatchHawkAction, PatchHawkObservation
 
 def _env_factory() -> PatchHawkEnv:
     """Factory callable for create_app — returns a fresh PatchHawkEnv instance."""
-    scenarios_path = os.getenv(
-        "PATCHHAWK_SCENARIOS", "patchhawk/data/scenarios.json"
-    )
+    scenarios_path = os.getenv("PATCHHAWK_SCENARIOS", "patchhawk/data/scenarios.json")
     return PatchHawkEnv(scenarios_path=scenarios_path, use_docker=False)
 
 
