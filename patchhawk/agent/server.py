@@ -15,7 +15,6 @@ import os
 import sys
 from typing import Optional
 
-from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
 from openenv.core import create_app
@@ -24,10 +23,19 @@ from patchhawk.agent.environment import PatchHawkEnv
 from patchhawk.env_models import PatchHawkAction, PatchHawkObservation
 
 
+# ── OpenEnv factory ───────────────────────────────────────────────
+
+
+def _env_factory() -> PatchHawkEnv:
+    """Factory callable for create_app — returns a fresh PatchHawkEnv."""
+    scenarios_path = os.getenv("PATCHHAWK_SCENARIOS", "patchhawk/data/scenarios.json")
+    return PatchHawkEnv(scenarios_path=scenarios_path, use_docker=False)
+
+
 # ── OpenEnv app (primary) ─────────────────────────────────────────
 
 openenv_app = create_app(
-    PatchHawkEnv,
+    _env_factory,
     PatchHawkAction,
     PatchHawkObservation,
     env_name="PatchHawk",
@@ -36,12 +44,15 @@ openenv_app = create_app(
 
 # ── Legacy A2A schemas ────────────────────────────────────────────
 
+
 class ActRequest(BaseModel):
     code_snippet: str = Field(..., description="Python source code to analyse")
 
 
 class ActResponse(BaseModel):
-    decision: str = Field(..., description="Agent decision (BLOCK_PR, SUBMIT_PATCH, etc.)")
+    decision: str = Field(
+        ..., description="Agent decision (BLOCK_PR, SUBMIT_PATCH, etc.)"
+    )
     patch: Optional[str] = Field(None, description="Proposed patch code, if any")
     confidence: float = Field(..., description="Agent confidence score 0-1")
     reward: float = Field(0.0, description="Total episode reward")
@@ -63,7 +74,10 @@ class AgentCard(BaseModel):
     input_schema: dict = {
         "type": "object",
         "properties": {
-            "code_snippet": {"type": "string", "description": "Python source code to analyse"},
+            "code_snippet": {
+                "type": "string",
+                "description": "Python source code to analyse",
+            },
         },
         "required": ["code_snippet"],
     }
@@ -123,17 +137,15 @@ def agent_act(request: ActRequest):
     }
 
     # Force this scenario
-    env.scenarios = [scenario]
-    obs = env.reset()
+    obs = env.reset(scenario=scenario)
 
-    done = False
     total_reward = 0.0
     decision_action = None
 
     while not obs.done:
         risk = obs.risk_score
 
-        # Heuristic policy (MVP stand-in for trained model)
+        # Native rule-based baseline policy (Zero-shot RL initialization state)
         if risk > 0.6:
             action = PatchHawkAction(action_type=PatchHawkEnv.ACTION_BLOCK_PR)
         elif risk > 0.3:
@@ -142,13 +154,15 @@ def agent_act(request: ActRequest):
             action = PatchHawkAction(action_type=PatchHawkEnv.ACTION_REQUEST_REVIEW)
 
         obs = env.step(action)
-        total_reward += (obs.reward or 0.0)
+        total_reward += obs.reward or 0.0
         decision_action = action.action_type
 
     confidence = min(1.0, max(0.0, 0.5 + total_reward / 6.0))
 
     return ActResponse(
-        decision=PatchHawkEnv.ACTION_NAMES[decision_action] if decision_action is not None else "ANALYZE",
+        decision=PatchHawkEnv.ACTION_NAMES[decision_action]
+        if decision_action is not None
+        else "ANALYZE",
         patch=None,
         confidence=round(confidence, 2),
         reward=round(total_reward, 2),
@@ -157,6 +171,7 @@ def agent_act(request: ActRequest):
 
 
 # ── CLI entry point ──────────────────────────────────────────────
+
 
 def main():
     import uvicorn

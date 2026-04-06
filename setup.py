@@ -10,7 +10,7 @@ setup(
     description="RL-powered supply-chain vulnerability detector & auto-patcher",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/your-username/patchhawk",
+    url="https://github.com/ramprasathk07/patchhawk",
     packages=find_packages(),
     python_requires=">=3.10",
     install_requires=[

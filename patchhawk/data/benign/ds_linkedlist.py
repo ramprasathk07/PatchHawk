@@ -3,11 +3,13 @@ class Node:
         self.data = data
         self.next = None
 
+
 class LinkedList:
     """A simple linked list."""
+
     def __init__(self):
         self.head = None
-        
+
     def append(self, data):
         new_node = Node(data)
         if not self.head:

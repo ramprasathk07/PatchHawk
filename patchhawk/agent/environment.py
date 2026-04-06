@@ -20,7 +20,6 @@ Reward table (set on Observation.reward):
 
 import json
 import random
-from pathlib import Path
 from typing import Optional, Any
 from uuid import uuid4
 
@@ -34,9 +33,7 @@ from patchhawk.env_models import (
 from patchhawk.agent.sandbox import run_code, validate_patch
 
 
-class PatchHawkEnv(
-    Environment[PatchHawkAction, PatchHawkObservation, PatchHawkState]
-):
+class PatchHawkEnv(Environment[PatchHawkAction, PatchHawkObservation, PatchHawkState]):
     """OpenEnv environment for PatchHawk."""
 
     # Action constants
@@ -123,7 +120,9 @@ class PatchHawkEnv(
         risk = sum(flags) / max(len(flags), 1)
 
         meta: dict[str, Any] = {
-            "scenario_id": self.current_scenario.get("id", "none") if self.current_scenario else "none",
+            "scenario_id": self.current_scenario.get("id", "none")
+            if self.current_scenario
+            else "none",
             "step": self.step_counter,
             "cumulative_reward": self.cumulative_reward,
             "reward_reason": reason,
@@ -167,8 +166,13 @@ class PatchHawkEnv(
         if seed is not None:
             random.seed(seed)
 
+        # Check for direct scenario override (used by GRPO training)
+        scenario_override = kwargs.get("scenario")
+
         # Pick scenario
-        if not self.scenarios:
+        if scenario_override:
+            self.current_scenario = scenario_override
+        elif not self.scenarios:
             self.current_scenario = {
                 "id": "fallback",
                 "type": "functional",
@@ -194,10 +198,13 @@ class PatchHawkEnv(
                     matches = [s for s in self.scenarios if s.get("attack_type") == atk]
                 else:
                     matches = [
-                        s for s in self.scenarios
+                        s
+                        for s in self.scenarios
                         if s.get("label") == "malicious" and s.get("patch")
                     ]
-            self.current_scenario = random.choice(matches) if matches else random.choice(self.scenarios)
+            self.current_scenario = (
+                random.choice(matches) if matches else random.choice(self.scenarios)
+            )
         else:
             self.current_scenario = random.choice(self.scenarios)
 

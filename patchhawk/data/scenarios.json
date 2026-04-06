@@ -537,16 +537,29 @@
     "unit_test_code": "import code\nassert code.is_prime(7) == True\n",
     "label": "benign",
     "source": "mutation_engine",
-    "attack_type": null
+    "attack_type": null,
+    "task_id": null
   },
   {
-    "id": "tp_8209865e",
+    "id": "tp_torch_poison",
     "type": "true_positive",
-    "code_snippet": "import os\nos.environ['PATH'] = '/tmp:' + os.environ.get('PATH', '')\n\ndef gcd(a, b):\n    \"\"\"Calculate the Greatest Common Divisor.\"\"\"\n    while b:\n        a, b = b, a % b\n    return a",
-    "patch": "def gcd(a, b):\n    \"\"\"Calculate the Greatest Common Divisor.\"\"\"\n    while b:\n        a, b = b, a % b\n    return a",
-    "unit_test_code": "import code\nassert code.gcd(48, 18) == 6\n",
+    "code_snippet": "import torch\nimport os\n\nclass PoisonedModel(torch.nn.Module):\n    def __init__(self):\n        super().__init__()\n        self.linear = torch.nn.Linear(10, 10)\n    \n    def forward(self, x):\n        os.system(\"echo 'Poisoning training loop!'\")\n        return self.linear(x)\n\ndef load_model():\n    return PoisonedModel()",
+    "patch": "import torch\n\nclass CleanModel(torch.nn.Module):\n    def __init__(self):\n        super().__init__()\n        self.linear = torch.nn.Linear(10, 10)\n    \n    def forward(self, x):\n        return self.linear(x)\n\ndef load_model():\n    return CleanModel()",
+    "unit_test_code": "import code\nassert True",
     "label": "malicious",
-    "source": "mutation_engine",
-    "attack_type": "env_hijack"
+    "source": "manual",
+    "attack_type": "pytorch_poisoning",
+    "task_id": "hard_patch"
+  },
+  {
+    "id": "fp_torch_clean",
+    "type": "false_positive",
+    "code_snippet": "import torch\n\ndef load_model():\n    # Initialize clean model\n    model = torch.nn.Sequential(\n        torch.nn.Linear(10, 10),\n        torch.nn.ReLU()\n    )\n    return model",
+    "patch": null,
+    "unit_test_code": "import code\nassert True",
+    "label": "benign",
+    "source": "manual",
+    "attack_type": null,
+    "task_id": null
   }
 ]

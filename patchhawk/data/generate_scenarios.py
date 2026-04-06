@@ -35,8 +35,7 @@ ATTACK_TEMPLATES = {
     },
     "env_hijack": {
         "inject": (
-            "import os\n"
-            "os.environ['PATH'] = '/tmp:' + os.environ.get('PATH', '')\n\n"
+            "import os\nos.environ['PATH'] = '/tmp:' + os.environ.get('PATH', '')\n\n"
         ),
         "patch": "",
     },
@@ -54,7 +53,7 @@ ATTACK_TEMPLATES = {
         "inject": (
             "def safe_eval(x):\n"
             "    return eval(x)\n"
-            "safe_eval('__import__(\"os\").system(\"echo 1\")')\n\n"
+            'safe_eval(\'__import__("os").system("echo 1")\')\n\n'
         ),
         "patch": "",
     },
@@ -231,9 +230,7 @@ def generate_track_b_scenarios(benign_files: list) -> list:
 # ============================================================
 
 
-def generate_track_a_scenarios_with_sdk(
-    output_dir: str, num_samples: int = 10
-) -> list:
+def generate_track_a_scenarios_with_sdk(output_dir: str, num_samples: int = 10) -> list:
     """
     Track A: Use Meta's synthetic-data-kit to generate high-quality
     code examples. Falls back gracefully if not installed.
@@ -336,13 +333,9 @@ def generate_track_a_scenarios_with_sdk(
                             "unit_test_code": item.get(
                                 "unit_test_code", "import code\nassert True"
                             ),
-                            "label": "malicious"
-                            if item.get("patch")
-                            else "benign",
+                            "label": "malicious" if item.get("patch") else "benign",
                             "source": "synthetic_data_kit",
-                            "attack_type": item.get(
-                                "attack_type", "llm_generated"
-                            ),
+                            "attack_type": item.get("attack_type", "llm_generated"),
                         }
                     )
 
@@ -482,9 +475,7 @@ def generate_track_hf_scenarios(
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Generate scenarios for PatchHawk"
-    )
+    parser = argparse.ArgumentParser(description="Generate scenarios for PatchHawk")
     parser.add_argument(
         "--benign-dir",
         type=str,

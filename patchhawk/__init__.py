@@ -45,11 +45,19 @@ ENV = {
         _dotenv_raw.get("GRPO_POLICY_MODEL", "unsloth/Qwen2.5-Coder-7B-Instruct"),
     ),
     "WANDB_API_KEY": os.getenv("WANDB_API_KEY", _dotenv_raw.get("WANDB_API_KEY", "")),
-    "WANDB_PROJECT": os.getenv("WANDB_PROJECT", _dotenv_raw.get("WANDB_PROJECT", "patchhawk")),
-    "WANDB_RUN_NAME": os.getenv("WANDB_RUN_NAME", _dotenv_raw.get("WANDB_RUN_NAME", "grpo-run-1")),
+    "WANDB_PROJECT": os.getenv(
+        "WANDB_PROJECT", _dotenv_raw.get("WANDB_PROJECT", "patchhawk")
+    ),
+    "WANDB_RUN_NAME": os.getenv(
+        "WANDB_RUN_NAME", _dotenv_raw.get("WANDB_RUN_NAME", "grpo-run-1")
+    ),
     "HF_TOKEN": os.getenv("HF_TOKEN", _dotenv_raw.get("HF_TOKEN", "")),
-    "HF_REPO": os.getenv("HF_REPO", _dotenv_raw.get("HF_REPO", "your-username/patchhawk")),
-    "DOCKER_IMAGE": os.getenv("DOCKER_IMAGE", _dotenv_raw.get("DOCKER_IMAGE", "patchhawk-sandbox:latest")),
+    "HF_REPO": os.getenv(
+        "HF_REPO", _dotenv_raw.get("HF_REPO", "ramprasathk07/patchhawk")
+    ),
+    "DOCKER_IMAGE": os.getenv(
+        "DOCKER_IMAGE", _dotenv_raw.get("DOCKER_IMAGE", "patchhawk-sandbox:latest")
+    ),
 }
 
 # ── config.yaml loading ──────────────────────────────────────────

@@ -1,6 +1,5 @@
 """Tests for the 3-stage patch validation pipeline."""
 
-import pytest
 from patchhawk.agent.sandbox import validate_patch
 
 
