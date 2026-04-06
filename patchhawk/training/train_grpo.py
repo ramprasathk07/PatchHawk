@@ -216,7 +216,7 @@ def train_agent(args):
         print(f"✅ Adapter saved to {args.output_dir}")
 
         # Upload to Hugging Face Hub
-        hf_repo = os.getenv("HF_REPO", "your-username/patchhawk")
+        hf_repo = os.getenv("HF_REPO", "ramprasathk07/patchhawk")
         try:
             model.push_to_hub(hf_repo, tokenizer=tokenizer)
             print(f"✅ Uploaded adapter to https://huggingface.co/{hf_repo}")
@@ -334,6 +334,8 @@ if __name__ == "__main__":
     parser.add_argument("--kl-coef", type=float, default=0.01)
     parser.add_argument("--ppo-clip-eps", type=float, default=0.2)
     parser.add_argument("--output-dir", type=str, default="grpo_lora")
+    parser.add_argument("--max-steps", type=int, default=100,
+                        help="Maximum number of training steps")
 
     args = parser.parse_args()
     train_agent(args)

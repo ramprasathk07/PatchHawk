@@ -20,6 +20,7 @@ if _project_root not in sys.path:
 
 from patchhawk.agent.environment import PatchHawkEnv
 from patchhawk.agent.sandbox import validate_patch
+from patchhawk.env_models import PatchHawkAction
 
 # ── Page config ───────────────────────────────────────────────────
 st.set_page_config(
@@ -138,48 +139,72 @@ def main():
             }
 
         with st.spinner("Agent running in OpenEnv…"):
-            obs, info = env.reset(options={"scenario": scenario})
+            obs = env.reset(scenario=scenario)
             time.sleep(0.4)  # visual feedback
+            risk = obs.risk_score
+            
+            # Step 1 – Analyze 
+            obs = env.step(PatchHawkAction(action_type=PatchHawkEnv.ACTION_ANALYZE))
+            r1 = obs.reward or 0.0
 
-            risk = float(obs["risk_score"][0])
+            # Step 2 – Decide using LLM or fallback
+            llm_thought_process = ""
+            try:
+                from inference import _build_user_prompt, _call_llm, _parse_action, SYSTEM_PROMPT
+                # Attempt real LLM integration
+                messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+                user_msg = _build_user_prompt(obs, 1)
+                messages.append({"role": "user", "content": user_msg})
+                
+                llm_response = _call_llm(messages)
+                llm_thought_process = llm_response
+                
+                action = _parse_action(llm_response)
+                final_action_type = action.action_type
+                if final_action_type == PatchHawkEnv.ACTION_SUBMIT_PATCH and action.patch_content:
+                    scenario["patch"] = action.patch_content # inject LLM patch
+            except Exception as e:
+                # Mock heuristic fallback
+                llm_thought_process = f"⚠️ LLM Error or HF_TOKEN missing ({e}). Using rule-based fallback heuristics."
+                if risk > 0.4 and scenario.get("patch"):
+                    final_action_type = PatchHawkEnv.ACTION_SUBMIT_PATCH
+                elif risk > 0.6:
+                    final_action_type = PatchHawkEnv.ACTION_BLOCK_PR
+                else:
+                    final_action_type = PatchHawkEnv.ACTION_REQUEST_REVIEW
+                action = PatchHawkAction(action_type=final_action_type)
 
-            # Step 1 – Analyze
-            obs, r1, _, _, _ = env.step(env.ACTION_ANALYZE)
-
-            # Step 2 – Decide
-            if risk > 0.4 and scenario.get("patch"):
-                final_action = env.ACTION_SUBMIT_PATCH
-            elif risk > 0.6:
-                final_action = env.ACTION_BLOCK_PR
-            else:
-                final_action = env.ACTION_REQUEST_REVIEW
-
-            obs, r2, term, trunc, step_info = env.step(final_action)
+            obs = env.step(action)
+            r2 = obs.reward or 0.0
             total_reward = r1 + r2
 
         # ── Results ───────────────────────────────────────────────
         st.subheader("📊 Agent Report")
+        
+        with st.expander("🤖 Agent Thought Process (LLM Trace)"):
+            st.markdown(f"```json\n{llm_thought_process}\n```")
+            
         m1, m2, m3 = st.columns(3)
         m1.metric("Risk Score", f"{risk:.2f}")
-        m2.metric("Decision", env.ACTION_NAMES[final_action])
+        m2.metric("Decision", PatchHawkEnv.ACTION_NAMES[final_action_type])
         m3.metric("Reward", f"{total_reward:+.2f}")
 
         tab1, tab2, tab3 = st.tabs(["Action Details", "Docker Telemetry", "Patch Proposal"])
 
         with tab1:
-            if final_action == env.ACTION_BLOCK_PR:
+            if final_action_type == PatchHawkEnv.ACTION_BLOCK_PR:
                 st.markdown(
                     "<div class='info-box status-malicious'>⛔ BLOCKED — "
                     "Vulnerability detected.</div>",
                     unsafe_allow_html=True,
                 )
-            elif final_action == env.ACTION_SUBMIT_PATCH:
+            elif final_action_type == PatchHawkEnv.ACTION_SUBMIT_PATCH:
                 st.markdown(
                     "<div class='info-box status-patched'>🩹 PATCH SUBMITTED — "
                     "Vulnerability neutralised.</div>",
                     unsafe_allow_html=True,
                 )
-                val_info = step_info.get("validation", "")
+                val_info = obs.metadata.get("validation", "")
                 if val_info:
                     st.info(val_info)
             else:
@@ -190,14 +215,14 @@ def main():
                 )
 
         with tab2:
-            telem = step_info.get("telemetry")
+            telem = obs.metadata.get("telemetry")
             if telem:
                 st.json(telem)
             else:
                 st.info("No sandbox execution for this path.")
 
         with tab3:
-            if final_action == env.ACTION_SUBMIT_PATCH and scenario.get("patch"):
+            if final_action_type == PatchHawkEnv.ACTION_SUBMIT_PATCH and scenario.get("patch"):
                 st.code(scenario["patch"], language="python")
 
                 # Run validation pipeline for display

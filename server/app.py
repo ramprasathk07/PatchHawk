@@ -32,10 +32,18 @@ from patchhawk.agent.environment import PatchHawkEnv
 from patchhawk.env_models import PatchHawkAction, PatchHawkObservation
 
 
+def _env_factory() -> PatchHawkEnv:
+    """Factory callable for create_app — returns a fresh PatchHawkEnv instance."""
+    scenarios_path = os.getenv(
+        "PATCHHAWK_SCENARIOS", "patchhawk/data/scenarios.json"
+    )
+    return PatchHawkEnv(scenarios_path=scenarios_path, use_docker=False)
+
+
 def create_openenv_app():
     """Create the OpenEnv FastAPI application."""
     return create_app(
-        PatchHawkEnv,
+        _env_factory,
         PatchHawkAction,
         PatchHawkObservation,
         env_name="PatchHawk",

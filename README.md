@@ -1,7 +1,7 @@
 # 🦅 PatchHawk: Autonomous Supply-Chain Guard
 
-[![W&B](https://img.shields.io/badge/W%26B-patchhawk-blue?logo=weightsandbiases)](https://wandb.ai/your-username/patchhawk)
-[![HuggingFace](https://img.shields.io/badge/🤗_Model-patchhawk-yellow)](https://huggingface.co/your-username/patchhawk)
+[![W&B](https://img.shields.io/badge/W%26B-patchhawk-blue?logo=weightsandbiases)](https://wandb.ai/ramprasathk07/patchhawk)
+[![HuggingFace](https://img.shields.io/badge/🤗_Model-patchhawk-yellow)](https://huggingface.co/ramprasathk07/patchhawk)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![OpenEnv](https://img.shields.io/badge/OpenEnv-Hackathon_MVP-orange)](https://github.com/pytorch/openenv)
@@ -21,7 +21,7 @@ graph TD
     end
 
     subgraph OpenEnv Loop
-        D --> E["PatchHawkEnv (openenv.Env)"]
+        D --> E["PatchHawkEnv (openenv.core.Environment)"]
         E -->|observation| F["GRPO Agent (Qwen2.5-Coder-7B + LoRA)"]
         F -->|action 0-4| E
         E -->|EXECUTE_SANDBOX| G["Docker Sandbox (--network none)"]
@@ -43,7 +43,7 @@ graph TD
 
 | Component | Path | Description |
 |-----------|------|-------------|
-| **Agent / Environment** | `patchhawk/agent/environment.py` | OpenEnv `openenv.Env` with Dict obs, Discrete(5) actions |
+| **Agent / Environment** | `patchhawk/agent/environment.py` | OpenEnv `openenv.core.Environment` with Pydantic typed obs/actions |
 | **Agent / Sandbox** | `patchhawk/agent/sandbox.py` | Docker sandbox + 3-stage patch validation |
 | **Agent / A2A Server** | `patchhawk/agent/server.py` | FastAPI: `GET /agent/card`, `POST /agent/act` |
 | **Training** | `patchhawk/training/train_grpo.py` | GRPO with unsloth + trl, 4-bit LoRA, W&B logging |
@@ -205,7 +205,7 @@ PatchHawk exposes an **Agent-to-Agent (A2A)** interface via FastAPI:
 - **No real malicious execution**: Docker sandbox runs with `--network none`, `--memory 256m`, `--cpus 0.5`, and non-root user.
 - **Re-attack verification**: Stage 3 only checks for *attempts* (socket creation, file writes) — never permits actual harm.
 - **SDK fallback**: If `synthetic-data-kit` CLI is not installed, Track A gracefully skips with a warning; Track B always generates ≥40 scenarios.
-- **OpenEnv compliant**: `PatchHawkEnv` inherits `openenv.Env` with proper `reset()` → `(obs, info)` and `step()` → `(obs, reward, term, trunc, info)` signatures.
+- **OpenEnv compliant**: `PatchHawkEnv` inherits `openenv.core.Environment` with proper `reset()` → `Observation` and `step(Action)` → `Observation` signatures (reward/done on observation).
 - **Deterministic dry-run**: `--dry-run` mode requires zero GPU and no external services.
 
 ---
@@ -216,7 +216,7 @@ PatchHawk exposes an **Agent-to-Agent (A2A)** interface via FastAPI:
 PatchHawk/
 ├── patchhawk/
 │   ├── __init__.py              # Config loader
-│   ├── openenv.py               # OpenEnv compatibility shim
+│   ├── env_models.py            # Pydantic Action/Observation/State models
 │   ├── agent/
 │   │   ├── __init__.py
 │   │   ├── environment.py       # openenv.Env implementation

@@ -30,8 +30,8 @@ from patchhawk import tasks as graders
 
 # ── Configuration ────────────────────────────────────────────────────
 
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "meta-llama/Llama-3.2-3B-Instruct")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/hf-inference/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-Coder-32B-Instruct")
 HF_TOKEN = os.getenv("HF_TOKEN", "")
 DRY_RUN = os.getenv("DRY_RUN", "0") == "1"
 SINGLE_TASK = os.getenv("TASK", "")
@@ -169,21 +169,23 @@ def run_episode(
 
         action_name = PatchHawkEnv.ACTION_NAMES[action.action_type]
         _done = str(obs.done).lower()
-        _err = str(error).lower() if error is None else error
+        _err = "null" if error is None else error
         print(
             f"[STEP] step={step_num} action={action_name} "
-            f"reward={step_reward.value:.2f} done={_done} error={_err}"
+            f"reward={step_reward.value:.2f} done={_done} error={_err}",
+            flush=True,
         )
         error = None  # reset for next step
 
     # ── Grade ────────────────────────────────────────────────────
     score = grader_fn(env, trajectory)
 
-    rewards_list = [round(r.value, 2) for r in rewards]
+    rewards_str = ",".join(f"{r.value:.2f}" for r in rewards)
     success = score >= 1.0
     print(
         f"[END] success={str(success).lower()} steps={step_num} "
-        f"score={score:.2f} rewards={rewards_list}"
+        f"score={score:.2f} rewards={rewards_str}",
+        flush=True,
     )
 
     return {

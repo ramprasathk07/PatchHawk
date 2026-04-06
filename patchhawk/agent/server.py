@@ -24,10 +24,20 @@ from patchhawk.agent.environment import PatchHawkEnv
 from patchhawk.env_models import PatchHawkAction, PatchHawkObservation
 
 
+# ── OpenEnv factory ───────────────────────────────────────────────
+
+def _env_factory() -> PatchHawkEnv:
+    """Factory callable for create_app — returns a fresh PatchHawkEnv."""
+    scenarios_path = os.getenv(
+        "PATCHHAWK_SCENARIOS", "patchhawk/data/scenarios.json"
+    )
+    return PatchHawkEnv(scenarios_path=scenarios_path, use_docker=False)
+
+
 # ── OpenEnv app (primary) ─────────────────────────────────────────
 
 openenv_app = create_app(
-    PatchHawkEnv,
+    _env_factory,
     PatchHawkAction,
     PatchHawkObservation,
     env_name="PatchHawk",
@@ -123,10 +133,8 @@ def agent_act(request: ActRequest):
     }
 
     # Force this scenario
-    env.scenarios = [scenario]
-    obs = env.reset()
+    obs = env.reset(scenario=scenario)
 
-    done = False
     total_reward = 0.0
     decision_action = None
 
