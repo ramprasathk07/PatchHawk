@@ -1,0 +1,22 @@
+# 🦅 PatchHawk: Isolated Python Sandbox
+# Used for the EXECUTE_SANDBOX (Stage 1) and SUBMIT_PATCH (Stage 3) validation.
+
+FROM python:3.11-slim
+
+# System dependencies for unit testing
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Pre-install pytest for the validator
+RUN pip install --no-cache-dir pytest
+
+# Create a non-privileged user for security
+RUN useradd -m sandbox
+USER sandbox
+
+# The environment mounts the code into /app at runtime
+CMD ["python3"]
