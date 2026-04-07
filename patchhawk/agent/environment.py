@@ -308,8 +308,16 @@ class PatchHawkEnv(Environment[PatchHawkAction, PatchHawkObservation, PatchHawkS
         if self.step_counter >= self.max_steps and not done:
             done = True
             if label == "malicious":
-                reward = -5.0
-                reason = "max steps reached on malicious scenario"
+                reward -= 5.0
+                reason += " | max steps reached on malicious scenario"
+
+        # ── Dynamic Risk Bonus ───────────────────────────────────
+        predict_risk = getattr(action, "predicted_risk", None)
+        if predict_risk is not None:
+            actual_risk = 1.0 if label == "malicious" else 0.0
+            accuracy_bonus = (1.0 - abs(actual_risk - float(predict_risk))) * 2.0
+            reward += accuracy_bonus
+            reason += f" | AI risk accuracy bonus: +{accuracy_bonus:.2f}"
 
         self.cumulative_reward += reward
 

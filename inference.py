@@ -2,7 +2,7 @@
 """
 PatchHawk inference script — runs the LLM agent loop against the
 OpenEnv-compliant PatchHawkEnv.
-
+a
 Environment variables:
     API_BASE_URL   – OpenAI-compatible API endpoint (required unless DRY_RUN=1)
     MODEL_NAME     – Model identifier (default: meta-llama/Llama-3.2-3B-Instruct)
@@ -29,11 +29,17 @@ from patchhawk.env_models import PatchHawkAction, PatchHawkObservation, PatchHaw
 from patchhawk import tasks as graders
 
 # ── Configuration ────────────────────────────────────────────────────
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 API_BASE_URL = os.getenv(
     "API_BASE_URL", "https://router.huggingface.co/hf-inference/v1"
 )
-MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-Coder-32B-Instruct")
+# Prefer explicit MODEL_NAME, fallback to GRPO_POLICY_MODEL from .env, then default to 32B model.
+MODEL_NAME = os.getenv("MODEL_NAME", os.getenv("GRPO_POLICY_MODEL", "Qwen/Qwen2.5-Coder-32B-Instruct"))
 HF_TOKEN = os.getenv("HF_TOKEN", "")
 DRY_RUN = os.getenv("DRY_RUN", "0") == "1"
 SINGLE_TASK = os.getenv("TASK", "")
@@ -59,18 +65,52 @@ TASK_DEFS = [
 # ── Prompt builder ───────────────────────────────────────────────────
 
 SYSTEM_PROMPT = """\
-You are PatchHawk, a security agent that detects supply-chain vulnerabilities
-in Python code. You will be given a code snippet and static analysis flags.
+You are PatchHawk, a security agent that detects supply-chain vulnerabilities in Python code.
 
-Respond with a JSON object containing:
+Given a code snippet and static analysis flags, you must respond **EXACTLY** with a single JSON object. No extra text, no markdown formatting.
+
+## Output JSON Schema
 {
-  "action_type": <int>,     // 0=ANALYZE, 1=EXECUTE_SANDBOX, 2=BLOCK_PR, 3=SUBMIT_PATCH, 4=REQUEST_REVIEW
-  "patch_content": <str|null>  // required if action_type == 3
+  "reasoning": "<str>",         // Mandatory: Explain what the vulnerability is, why it's dangerous, and your recommended fix (if any).
+  "risk_score": <float>,        // 0.0 (no risk) to 1.0 (critical). Be precise to two decimals.
+  "action_type": <int>,         // One of: 0=ANALYZE, 1=EXECUTE_SANDBOX, 2=BLOCK_PR, 3=SUBMIT_PATCH, 4=REQUEST_REVIEW
+  "patch_content": "<str|null>" // Full patched code if action_type=3, otherwise null. Must be valid Python.
 }
 
-Be decisive. If the code is clearly malicious, BLOCK_PR (2). If you can
-generate a patch that removes the vulnerability, use SUBMIT_PATCH (3).
+## Action Type Guidelines
+- **0 ANALYZE** – No immediate threat, but needs deeper review.
+- **1 EXECUTE_SANDBOX** – Suspicious but not obviously malicious; run in isolated environment.
+- **2 BLOCK_PR** – Severely malicious, unfixable (e.g., hidden backdoor, remote shell). Reject PR.
+- **3 SUBMIT_PATCH** – Vulnerability can be fixed. Provide corrected code in `patch_content`.
+- **4 REQUEST_REVIEW** – Complex or ambiguous; require human expert.
+
+## Rules
+- `reasoning` must be thorough: describe the flaw, its impact (CWE if known), and step‑by‑step how to patch.
+- Escape all double quotes inside strings with backslash (`\"`).
+- If the code is benign, set `risk_score` ≤ 0.2, `action_type` = 0, and `patch_content` = null.
+- Never include comments or explanations outside the JSON object.
+
+**Example valid response:**
+{"reasoning": "Hardcoded password 'admin123' in __init__ allows credential bypass. Replace with env var.", "risk_score": 0.85, "action_type": 3, "patch_content": "import os\\nclass Malicious:\\n    def __init__(self):\\n        self.cache = []\\n        self.password = os.getenv('DB_PASS')\\n    ..."}
 """
+
+# SYSTEM_PROMPT = """\
+# You are PatchHawk, a security agent that detects supply-chain vulnerabilities
+# in Python code. You will be given a code snippet and static analysis flags.
+
+# Respond EXACTLY with a JSON object containing the following keys:
+# {
+#   "reasoning": "<str>",         // Step-by-step explanation of what the vulnerability is, why you are blocking/patching it, and how it can be fixed.
+#   "risk_score": <float>,        // Your predicted risk score from 0.0 to 1.0 based on your analysis
+#   "action_type": <int>,         // 0=ANALYZE, 1=EXECUTE_SANDBOX, 2=BLOCK_PR, 3=SUBMIT_PATCH, 4=REQUEST_REVIEW
+#   "patch_content": "<str|null>" // The full patched python code fixing the vulnerability
+# }
+
+# Be decisive. First, explain your findings thoroughly in the "reasoning" field.
+# If the code is malicious but you can fix the vulnerability, use SUBMIT_PATCH (3) and provide the safe, corrected code in "patch_content".
+# If the code is severely malicious and completely unfixable, use BLOCK_PR (2).
+# IMPORTANT: Ensure your output is perfectly VALID JSON. Escape all double quotes inside strings properly.
+# """
 
 
 def _build_user_prompt(obs: PatchHawkObservation, step: int) -> str:
@@ -89,37 +129,119 @@ def _build_user_prompt(obs: PatchHawkObservation, step: int) -> str:
 # ── LLM caller ───────────────────────────────────────────────────────
 
 
+_local_pipeline = None
+
+def _call_llm_local(messages: list[dict]) -> str:
+    """Call a local HuggingFace model using transformers pipeline if remote API fails."""
+    global _local_pipeline
+    if _local_pipeline is None:
+        import torch
+        from transformers import pipeline
+        
+        # User is already using this model in .env GRPO_POLICY_MODEL
+        local_model = os.getenv("GRPO_POLICY_MODEL", "unsloth/Qwen2.5-Coder-3B-Instruct")
+        print(f"\n[Fallback] Loading local model: {local_model} into memory. This may take a moment...", flush=True)
+        
+        _local_pipeline = pipeline(
+            "text-generation",
+            model=local_model,
+            model_kwargs={"torch_dtype": torch.bfloat16},  # Half-precision to save VRAM natively fit on 12GB
+            device_map="auto"
+        )
+        print("[Fallback] Local model loaded successfully.\n", flush=True)
+
+    # Format messages array to a standard conversational string format
+    prompt = _local_pipeline.tokenizer.apply_chat_template(
+        messages, 
+        tokenize=False, 
+        add_generation_prompt=True
+    )
+    
+    # Run Generation
+    outputs = _local_pipeline(
+        prompt,
+        max_new_tokens=2048,
+        do_sample=True,
+        temperature=0.2,
+    )
+    
+    generated = outputs[0]["generated_text"]
+    
+    print(f"\ngenerated:{generated}\n")
+    # Strip prompt from returned generated output
+    if generated.startswith(prompt):
+        generated = generated[len(prompt):]
+        
+    return generated.strip()
+
+
 def _call_llm(messages: list[dict]) -> str:
     """Call the OpenAI-compatible LLM and return the text content."""
     from openai import OpenAI
 
-    client = OpenAI(
-        base_url=API_BASE_URL,
-        api_key=HF_TOKEN or "no-key",
-    )
-    response = client.chat.completions.create(
-        model=MODEL_NAME,
-        messages=messages,
-        temperature=0.2,
-        max_tokens=512,
-    )
-    return response.choices[0].message.content or ""
+    try:
+        client = OpenAI(
+            base_url=API_BASE_URL,
+            api_key=HF_TOKEN or "no-key",
+        )
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=messages,
+            temperature=0.2,
+            max_tokens=512,
+        )
+        return response.choices[0].message.content or ""
+    except Exception as e:
+        print(f"[LLM ERROR] Remote API failed: {e}. Initiating local Fallback...", flush=True)
+        return _call_llm_local(messages)
 
+
+import re
 
 def _parse_action(text: str) -> PatchHawkAction:
     """Parse LLM response text into a PatchHawkAction."""
-    # Try to extract JSON from the response
     text = text.strip()
-    # Handle markdown code blocks
     if "```json" in text:
         text = text.split("```json")[1].split("```")[0].strip()
-    elif "```" in text:
+    elif "```" in text and not text.startswith("{"):
         text = text.split("```")[1].split("```")[0].strip()
 
-    data = json.loads(text)
+    def clean_patch(p: str) -> str:
+        if not p: return p
+        if "```python" in p:
+            return p.split("```python")[1].split("```")[0].strip()
+        if "```" in p:
+            return p.split("```")[1].split("```")[0].strip()
+        return p
+
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        action_match = re.search(r'"action_type"\s*:\s*(\d+)', text)
+        action_type = int(action_match.group(1)) if action_match else 2
+        
+        risk_match = re.search(r'"risk_score"\s*:\s*([\d\.]+)', text)
+        risk_score = float(risk_match.group(1)) if risk_match else None
+        
+        patch_match = re.search(r'"patch_content"\s*:\s*"(.*)', text, re.DOTALL)
+        patch_content = None
+        if patch_match:
+            raw_patch = patch_match.group(1).rsplit('"', 1)[0]
+            raw_patch = raw_patch.replace("\\n", "\n").replace('\\"', '"').replace("\\\\", "\\")
+            patch_content = clean_patch(raw_patch)
+
+        return PatchHawkAction(
+            action_type=action_type,
+            reasoning="JSON Error/Truncated Output. Recovered partial data.",
+            predicted_risk=risk_score,
+            patch_content=patch_content
+        )
+
     return PatchHawkAction(
-        action_type=int(data["action_type"]),
-        patch_content=data.get("patch_content"),
+        action_type=int(data.get("action_type", 2)),
+        patch_content=clean_patch(data.get("patch_content")),
+        reasoning=data.get("reasoning"),
+        predicted_risk=data.get("risk_score"),
     )
 
 

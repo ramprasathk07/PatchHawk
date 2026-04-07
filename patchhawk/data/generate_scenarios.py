@@ -128,12 +128,16 @@ def auto_generate_unit_test(filename: str, code: str) -> str:
 # ============================================================
 
 
-def generate_track_b_scenarios(benign_files: list) -> list:
-    """Generate ≥ 50 scenarios: 25 TP, 15 FP, 15 functional."""
+def generate_track_b_scenarios(benign_files: list, num_samples: int = 55) -> list:
+    """Generate proportional scenarios dynamically based on num_samples."""
     scenarios = []
 
-    # ── True Positives (25) ──────────────────────────────────
-    for i in range(25):
+    tp_count = int(num_samples * 0.45)
+    fp_count = int(num_samples * 0.27)
+    fn_count = num_samples - tp_count - fp_count
+
+    # ── True Positives (45%) ──────────────────────────────────
+    for i in range(tp_count):
         bf = random.choice(benign_files)
         attack_name, attack_data = random.choice(list(ATTACK_TEMPLATES.items()))
         malicious_code = attack_data["inject"] + bf["code"]
@@ -187,7 +191,7 @@ def generate_track_b_scenarios(benign_files: list) -> list:
             "result = subprocess.run(['echo', 'build ok'], capture_output=True)\n\n",
         ),
     ]
-    for i in range(15):
+    for i in range(fp_count):
         bf = random.choice(benign_files)
         fp_name, fp_code = random.choice(fp_templates)
         suspicious_code = fp_code + bf["code"]
@@ -205,8 +209,8 @@ def generate_track_b_scenarios(benign_files: list) -> list:
             }
         )
 
-    # ── Functional / Clean (15) ──────────────────────────────
-    for i in range(15):
+    # ── Functional / Clean (28%) ──────────────────────────────
+    for i in range(fn_count):
         bf = random.choice(benign_files)
         test_code = auto_generate_unit_test(bf["filename"], bf["code"])
         scenarios.append(
@@ -222,7 +226,7 @@ def generate_track_b_scenarios(benign_files: list) -> list:
             }
         )
 
-    return scenarios  # 55 total from Track B alone
+    return scenarios
 
 
 # ============================================================
@@ -487,6 +491,12 @@ def main():
         default="patchhawk/data/scenarios.json",
     )
     parser.add_argument(
+        "--num-samples",
+        type=int,
+        default=55,
+        help="Number of scenarios to generate with Track B (mutation engine).",
+    )
+    parser.add_argument(
         "--use-sdk",
         action="store_true",
         help="Use Meta synthetic-data-kit (requires CLI + vLLM)",
@@ -535,7 +545,7 @@ def main():
         return
 
     # Track B (always)
-    scenarios = generate_track_b_scenarios(benign_files)
+    scenarios = generate_track_b_scenarios(benign_files, args.num_samples)
 
     # Track A (optional)
     if args.use_sdk:

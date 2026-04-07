@@ -181,7 +181,10 @@ def main():
                     final_action_type = PatchHawkEnv.ACTION_BLOCK_PR
                 else:
                     final_action_type = PatchHawkEnv.ACTION_REQUEST_REVIEW
-                action = PatchHawkAction(action_type=final_action_type)
+                action = PatchHawkAction(
+                    action_type=final_action_type, 
+                    reasoning="Static rule-based fallback decision due to high risk score."
+                )
 
         # Visual Hacker Terminal Effect
         if final_action_type == PatchHawkEnv.ACTION_SUBMIT_PATCH:
@@ -219,8 +222,13 @@ def main():
         with st.expander("🤖 Agent Thought Process (LLM Trace)"):
             st.markdown(f"```json\n{llm_thought_process}\n```")
 
+        # Opt for LLM's predicted risk score if available
+        display_risk = getattr(action, "predicted_risk", None)
+        if display_risk is None:
+            display_risk = risk
+
         m1, m2, m3 = st.columns(3)
-        m1.metric("Risk Score", f"{risk:.2f}")
+        m1.metric("Risk Score", f"{float(display_risk):.2f}")
         m2.metric("Decision", PatchHawkEnv.ACTION_NAMES[final_action_type])
         m3.metric("Reward", f"{total_reward:+.2f}")
 
@@ -229,6 +237,10 @@ def main():
         )
 
         with tab1:
+            if hasattr(action, "reasoning") and action.reasoning:
+                st.markdown("### 🧠 Agent's Reasoning")
+                st.info(action.reasoning)
+
             if final_action_type == PatchHawkEnv.ACTION_BLOCK_PR:
                 st.markdown(
                     "<div class='info-box status-malicious'>⛔ BLOCKED — "
@@ -253,10 +265,13 @@ def main():
 
         with tab2:
             telem = obs.metadata.get("telemetry")
+            details = obs.metadata.get("details")
             if telem:
                 st.json(telem)
+            elif dict(details) if details else None:
+                st.json(details)
             else:
-                st.info("No sandbox execution for this path.")
+                st.info("No sandbox telemetry generated for this action.")
 
         with tab3:
             if final_action_type == PatchHawkEnv.ACTION_SUBMIT_PATCH and scenario.get(

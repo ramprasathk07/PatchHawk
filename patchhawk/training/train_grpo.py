@@ -33,6 +33,7 @@ def _build_prompt(scenario: dict) -> str:
         f"<code_snippet>\n{scenario['code_snippet']}\n</code_snippet>\n"
         "Respond in STRICT XML:\n"
         "<thought>...</thought>\n"
+        "<risk_score>0.0 to 1.0</risk_score>\n"
         "<action>0-4</action>\n"
         "<patch>...</patch> (ONLY if action=3)\n"
     )
@@ -90,7 +91,10 @@ def train_agent(args):
     else:
         print("No GPU found — training will be slow.")
 
-    MODEL_NAME = "Qwen/Qwen2.5-Coder-3B-Instruct"
+    from dotenv import load_dotenv
+    load_dotenv()
+    
+    MODEL_NAME = os.getenv("GRPO_POLICY_MODEL", "Qwen/Qwen2.5-Coder-3B-Instruct")
 
     # 4‑bit quantisation config
     bnb_config = BitsAndBytesConfig(
@@ -147,6 +151,10 @@ def train_agent(args):
                 score += 0.5
             else:
                 score -= 1.0
+            if re.search(r"<risk_score>[\d\.]+</risk_score>", text):
+                score += 0.5
+            else:
+                score -= 1.0
             if re.search(r"<action>[0-4]</action>", text):
                 score += 0.5
             else:
@@ -194,12 +202,22 @@ def train_agent(args):
             patch_match = re.search(r"<patch>(.*?)</patch>", text, re.DOTALL)
             if patch_match:
                 patch = patch_match.group(1).strip()
+                
+            risk_match = re.search(r"<risk_score>([\d\.]+)</risk_score>", text)
+            predicted_risk = float(risk_match.group(1)) if risk_match else None
 
             try:
                 # Reset environment to the exact scenario
-                env.reset(scenario_idx=env.scenarios.index(scenario))
-                obs = env.step(PatchHawkAction(action_type=action_type, patch_content=patch))
-                rewards.append(float(obs.reward or 0.0))
+                env.reset(scenario=scenario)
+                obs = env.step(PatchHawkAction(
+                    action_type=action_type, 
+                    patch_content=patch, 
+                    predicted_risk=predicted_risk
+                ))
+                reward_val = float(obs.reward or 0.0)
+                rewards.append(reward_val)
+                val_msg = obs.metadata.get('validation') or ("Telemetry Extracted" if obs.metadata.get('telemetry') else "None")
+                print(f"[Env Reward] Action: {action_type} | Reward: {reward_val:+.2f} | Docker: {val_msg}")
             except Exception as exc:
                 print(f"env_reward crash: {exc}")
                 rewards.append(-3.0)

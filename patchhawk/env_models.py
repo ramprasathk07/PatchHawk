@@ -53,6 +53,12 @@ class PatchHawkAction(Action):
     patch_content: Optional[str] = Field(
         None, description="The unified context patch if action is SUBMIT_PATCH"
     )
+    reasoning: Optional[str] = Field(
+        None, description="Explanation of the vulnerability and chosen action"
+    )
+    predicted_risk: Optional[float] = Field(
+        None, description="LLM predicted risk score (0.0 to 1.0)"
+    )
 
 
 # ── State ────────────────────────────────────────────────────────────

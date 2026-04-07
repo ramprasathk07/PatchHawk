@@ -31,7 +31,7 @@ def run_code(
     temp_dir = tempfile.mkdtemp(prefix="patchhawk_sandbox_")
     script_path = os.path.join(temp_dir, "script.py")
 
-    with open(script_path, "w") as f:
+    with open(script_path, "w", encoding="utf-8") as f:
         f.write(code)
 
     result: Dict[str, Any] = {
@@ -91,7 +91,7 @@ def check_syntax(
     temp_dir = tempfile.mkdtemp(prefix="patchhawk_syntax_")
     script_path = os.path.join(temp_dir, "script.py")
 
-    with open(script_path, "w") as f:
+    with open(script_path, "w", encoding="utf-8") as f:
         f.write(code)
 
     try:
@@ -107,7 +107,7 @@ def check_syntax(
                 "--cpus",
                 "0.5",
                 "-v",
-                f"{temp_dir}:/app:ro",
+                f"{temp_dir}:/app:rw",
                 "patchhawk-sandbox:latest",
                 "python",
                 "-m",
