@@ -44,4 +44,4 @@ dashboard = [
 server = "server.app:main"
 
 [tool.setuptools.packages.find]
-include = ["patchhawk*", "server*"]
+include = ["patchhawk*", "server*", "src*"]

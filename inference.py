@@ -35,14 +35,13 @@ try:
 except ImportError:
     pass
 
-API_BASE_URL = os.getenv(
-    "API_BASE_URL", "https://router.huggingface.co/hf-inference/v1"
-)
-# Prefer explicit MODEL_NAME, fallback to GRPO_POLICY_MODEL from .env, then default to 32B model.
-MODEL_NAME = os.getenv("MODEL_NAME", os.getenv("GRPO_POLICY_MODEL", "Qwen/Qwen2.5-Coder-32B-Instruct"))
+API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/hf-inference/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-Coder-32B-Instruct")
 HF_TOKEN = os.getenv("HF_TOKEN", "")
+LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME", "patch_hawkv1:latest")
 DRY_RUN = os.getenv("DRY_RUN", "0") == "1"
 SINGLE_TASK = os.getenv("TASK", "")
+BENCHMARK = os.getenv("BENCHMARK", "PatchHawk")
 
 TASK_DEFS = [
     {
@@ -195,7 +194,7 @@ def _call_llm(messages: list[dict]) -> str:
         )
         return response.choices[0].message.content or ""
     except Exception as e:
-        print(f"[LLM ERROR] Remote API failed: {e}. Initiating local Fallback...", flush=True)
+        print(f"[LLM ERROR] Remote API failed: {e}. Initiating local Fallback...", file=sys.stderr, flush=True)
         return _call_llm_local(messages)
 
 
@@ -260,7 +259,7 @@ def run_episode(
     """Run one episode and return summary dict."""
     obs = env.reset(task_id=task_id)
 
-    print(f"[START] task={task_id} env=PatchHawk model={MODEL_NAME}")
+    print(f"[START] task={task_id} env={BENCHMARK} model={MODEL_NAME}", flush=True)
 
     trajectory: List[Tuple[PatchHawkAction, PatchHawkObservation]] = []
     rewards: List[PatchHawkReward] = []
@@ -298,10 +297,12 @@ def run_episode(
 
         action_name = PatchHawkEnv.ACTION_NAMES[action.action_type]
         _done = str(obs.done).lower()
-        _err = "null" if error is None else error
+        # Sanitize error and action to ensure single-line stdout compliance
+        _err = "null" if error is None else str(error).replace("\n", " ")
+        _act = str(action_name).replace("\n", " ")
+        
         print(
-            f"[STEP] step={step_num} action={action_name} "
-            f"reward={step_reward.value:.2f} done={_done} error={_err}",
+            f"[STEP] step={step_num} action={_act} reward={step_reward.value:.2f} done={_done} error={_err}",
             flush=True,
         )
         error = None  # reset for next step
@@ -309,6 +310,9 @@ def run_episode(
     # ── Grade ────────────────────────────────────────────────────
     score = grader_fn(env, trajectory)
 
+    # Ensure score is in [0, 1]
+    score = min(max(float(score), 0.0), 1.0)
+    
     rewards_str = ",".join(f"{r.value:.2f}" for r in rewards)
     success = score >= 1.0
     print(

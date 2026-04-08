@@ -3,7 +3,7 @@ __pycache__/
 *.py[codz]
 *$py.class
 wandb/
-
+patch_hawk/
 # C extensions
 *.so
 docs/

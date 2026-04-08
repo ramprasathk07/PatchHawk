@@ -19,8 +19,13 @@ COPY pyproject.toml .
 COPY inference.py .
 COPY config.yaml .
 
-# Expose the OpenEnv server port
-EXPOSE 7860
+# Copy and configure the startup script
+COPY start.sh .
+RUN chmod +x start.sh
 
-# Launch the OpenEnv HTTP server
-CMD ["openenv", "serve", "--env", "patchhawk.agent.environment:PatchHawkEnv", "--port", "7860"]
+# Expose both the OpenEnv API port and Streamlit port
+EXPOSE 7860
+EXPOSE 8501
+
+# Launch both servers
+CMD ["./start.sh"]
