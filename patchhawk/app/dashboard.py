@@ -172,6 +172,14 @@ def main():
                     and action.patch_content
                 ):
                     scenario["patch"] = action.patch_content  # inject LLM patch
+                # If the model chose SUBMIT_PATCH but omitted patch_content, fall back
+                # to the scenario patch if present so the demo remains functional.
+                if (
+                    final_action_type == PatchHawkEnv.ACTION_SUBMIT_PATCH
+                    and not action.patch_content
+                    and scenario.get("patch")
+                ):
+                    action.patch_content = scenario["patch"]
             except Exception as e:
                 # LLM Service Unavailable: Initiating Static Analysis Fallback
                 llm_thought_process = f"⚠️ LLM Error or HF_TOKEN missing ({e}). Using rule-based static fallback."

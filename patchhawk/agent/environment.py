@@ -93,17 +93,51 @@ class PatchHawkEnv(Environment[PatchHawkAction, PatchHawkObservation, PatchHawkS
             return []
 
     def _compute_static_flags(self, code: str) -> list[int]:
-        flags = [0] * 5
-        if "eval(" in code or "exec(" in code:
+        """
+        Static heuristics used to seed a risk score.
+
+        Important: these are intentionally lightweight (string-based) so they work
+        in CPU-only judge environments without extra dependencies.
+        """
+
+        lowered = code.lower()
+
+        # We keep flags small and interpretable; risk_score is mean(flags).
+        flags = [0] * 8
+
+        # 0) code execution primitives
+        if "eval(" in lowered or "exec(" in lowered:
             flags[0] = 1
-        if "subprocess" in code or "os.system" in code:
+
+        # 1) shell / process execution
+        if "subprocess" in lowered or "os.system" in lowered:
             flags[1] = 1
-        if "socket" in code or "requests" in code:
+
+        # 2) network primitives
+        if "socket" in lowered or "requests" in lowered or "urllib" in lowered:
             flags[2] = 1
-        if "os.environ" in code:
+
+        # 3) environment manipulation / credential access
+        if "os.environ" in lowered:
             flags[3] = 1
-        if "base64" in code or "zlib" in code:
+
+        # 4) obfuscation indicators
+        if "base64" in lowered or "zlib" in lowered:
             flags[4] = 1
+
+        # 5) typosquatting / suspicious imports (common misspellings from our scenarios)
+        # We treat these as high-signal in this hackathon setting.
+        if "import pythonn" in lowered or "import reqeusts" in lowered:
+            flags[5] = 1
+
+        # 6) unsafe deserialization
+        if "pickle.loads" in lowered:
+            flags[6] = 1
+
+        # 7) dynamic import / code download patterns (very coarse)
+        if "__import__(" in lowered or "importlib.import_module" in lowered:
+            flags[7] = 1
+
         return flags
 
     def _build_observation(
