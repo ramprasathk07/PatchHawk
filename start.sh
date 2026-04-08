@@ -1,7 +1,8 @@
 #!/bin/bash
 
-API_PORT="${API_PORT:-8000}"
-PORT="${PORT:-7860}"
+# Force ports to prevent collision with HF defaults
+export API_PORT=8000
+export PORT=7860
 
 # Start FastAPI on API_PORT
 echo "[SYSTEM] Starting OpenEnv API server on port ${API_PORT}..."
