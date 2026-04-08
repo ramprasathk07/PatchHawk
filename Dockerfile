@@ -1,8 +1,8 @@
 FROM python:3.11-slim
 
-# System dependencies (docker.io for Docker-in-Docker sandbox)
+# System dependencies (docker.io for Docker-in-Docker sandbox, nginx for proxying)
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl docker.io \
+    && apt-get install -y --no-install-recommends curl docker.io nginx gettext-base \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -18,6 +18,7 @@ COPY openenv.yaml .
 COPY pyproject.toml .
 COPY inference.py .
 COPY config.yaml .
+COPY nginx.conf /etc/nginx/nginx.conf
 
 # Copy and configure the startup script
 COPY start.sh .

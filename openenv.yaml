@@ -2,8 +2,7 @@ name: PatchHawk
 version: 1.0.0
 spec_version: 1
 type: space
-runtime: fastapi
-app: server.app:app
+runtime: docker
 port: 7860
 description: Detect and patch supply-chain vulnerabilities in Python code.
 tags: [security, supply-chain, code-review, llm-agent]

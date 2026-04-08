@@ -1,7 +1,11 @@
 #!/bin/bash
-# Start the OpenEnv API server (Hackathon Compliance)
-echo "Starting OpenEnv API server on port 7860..."
-uvicorn server.app:app --host 0.0.0.0 --port 7860 &
+
+API_PORT="${API_PORT:-8000}"
+PORT="${PORT:-7860}"
+
+# Start FastAPI on API_PORT
+echo "Starting OpenEnv API server on port ${API_PORT}..."
+uvicorn server.app:app --host 0.0.0.0 --port "${API_PORT}" &
 
 # Start the Streamlit Dashboard (User UI) in the background with Proxy-friendly settings
 echo "Starting Streamlit Dashboard on port 8501..."
@@ -13,7 +17,6 @@ streamlit run patchhawk/app/dashboard.py \
     --server.headless true \
     --browser.gatherUsageStats false &
 
-# Start the OpenEnv API server (Hackathon Compliance) on Port 7860
-# This server now PROXIES all UI requests to Streamlit on 8501
-echo "Starting OpenEnv API server on port 7860..."
-uvicorn server.app:app --host 0.0.0.0 --port 7860
+# Start Nginx in foreground on PORT
+echo "Starting Nginx reverse proxy on ${PORT}..."
+envsubst '${PORT}' < /etc/nginx/nginx.conf > /tmp/nginx.conf && nginx -c /tmp/nginx.conf -g "daemon off;"
