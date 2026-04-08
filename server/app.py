@@ -33,13 +33,16 @@ def create_openenv_app():
 
 app = create_openenv_app()
 
-@app.get("/")
+@app.get("/", include_in_schema=False)
 def root():
-    # When running without the nginx+Streamlit front-end, make the root page useful.
-    # (Hugging Face will often open `/` by default.)
+    """Redirect root access to documentation."""
     from fastapi.responses import RedirectResponse
-
     return RedirectResponse(url="/docs")
+
+@app.get("/health")
+def health():
+    """Health check endpoint for the API."""
+    return {"status": "ok", "app": "PatchHawk"}
 
 def main(port: int | None = None) -> None:
     """Start the PatchHawk OpenEnv server."""

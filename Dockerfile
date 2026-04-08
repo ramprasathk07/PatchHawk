@@ -11,17 +11,18 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy configuration files first
+COPY nginx.conf /etc/nginx/nginx.conf
+COPY start.sh .
+COPY openenv.yaml .
+COPY pyproject.toml .
+COPY config.yaml .
+
 # Copy application source
 COPY patchhawk/ patchhawk/
 COPY server/ server/
-COPY openenv.yaml .
-COPY pyproject.toml .
 COPY inference.py .
-COPY config.yaml .
-COPY nginx.conf /etc/nginx/nginx.conf
 
-# Copy and configure the startup script
-COPY start.sh .
 RUN chmod +x start.sh
 
 # Expose both the OpenEnv API port and Streamlit port
