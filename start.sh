@@ -17,6 +17,10 @@ streamlit run patchhawk/app/dashboard.py \
     --server.headless true \
     --browser.gatherUsageStats false 2>&1 | sed 's/^/[STREAMLIT] /' &
 
+# Give services a moment to bind
+echo "[SYSTEM] Waiting for services to initialize..."
+sleep 5
+
 # Start Nginx in foreground on PORT
 echo "[SYSTEM] Starting Nginx reverse proxy on ${PORT}..."
 envsubst '${PORT}' < /etc/nginx/nginx.conf > /tmp/nginx.conf
