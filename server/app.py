@@ -30,6 +30,7 @@ from openenv.core import create_app
 
 from patchhawk.agent.environment import PatchHawkEnv
 from patchhawk.env_models import PatchHawkAction, PatchHawkObservation
+from fastapi.responses import HTMLResponse
 
 
 def _env_factory() -> PatchHawkEnv:
@@ -49,6 +50,45 @@ def create_openenv_app():
 
 
 app = create_openenv_app()
+
+@app.get("/", response_class=HTMLResponse)
+def root_dashboard():
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>PatchHawk | Autonomous DevSecOps SOC</title>
+        <style>
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0d1117; color: #c9d1d9; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+            .container { background: #161b22; padding: 40px; border-radius: 12px; border: 1px solid #30363d; box-shadow: 0 10px 30px rgba(0,0,0,0.5); text-align: center; max-width: 600px; }
+            h1 { color: #58a6ff; margin-bottom: 10px; }
+            p { font-size: 1.1em; color: #8b949e; line-height: 1.6; }
+            .status { display: inline-block; padding: 5px 15px; border-radius: 20px; background: #238636; color: white; font-weight: bold; margin: 20px 0; }
+            .links { display: flex; gap: 10px; justify-content: center; margin-top: 30px; }
+            .btn { text-decoration: none; padding: 12px 25px; border-radius: 6px; font-weight: bold; transition: 0.3s; }
+            .btn-blue { background: #1f6feb; color: white; }
+            .btn-blue:hover { background: #388bfd; }
+            .btn-outline { border: 1px solid #30363d; color: #58a6ff; }
+            .btn-outline:hover { background: #30363d; }
+            .badge { background: #30363d; padding: 4px 10px; border-radius: 4px; font-family: monospace; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🦅 PatchHawk SOC</h1>
+            <p>Autonomous Supply-Chain Vulnerability & Patching Agent</p>
+            <div class="status">● ENVIRONMENT LIVE</div>
+            <p>The OpenEnv API Spec is running correctly at <span class="badge">port: 7860</span>.</p>
+            
+            <div class="links">
+                <a href="/web" class="btn btn-blue">Open Env Explorer</a>
+                <a href="/docs" class="btn btn-outline">API Docs (Swagger)</a>
+            </div>
+            <p style="margin-top:20px; font-size:0.9em;">Evaluation URL: <span class="badge">/reset</span></p>
+        </div>
+    </body>
+    </html>
+    """
 
 
 def main(port: int | None = None) -> None:
