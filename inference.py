@@ -35,13 +35,14 @@ try:
 except ImportError:
     pass
 
+API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/hf-inference/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-Coder-32B-Instruct")
-HF_TOKEN = os.getenv("HF_TOKEN", "")
 LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME", "patch_hawkv1:latest")
 DRY_RUN = os.getenv("DRY_RUN", "0") == "1"
 SINGLE_TASK = os.getenv("TASK", "")
 BENCHMARK = os.getenv("BENCHMARK", "PatchHawk")
+SUCCESS_SCORE_THRESHOLD = 1.0
 
 TASK_DEFS = [
     {
@@ -184,7 +185,7 @@ def _call_llm(messages: list[dict]) -> str:
     try:
         client = OpenAI(
             base_url=API_BASE_URL,
-            api_key=HF_TOKEN or "no-key",
+            api_key=API_KEY or "no-key",
         )
         response = client.chat.completions.create(
             model=MODEL_NAME,
@@ -312,9 +313,9 @@ def run_episode(
 
     # Ensure score is in [0, 1]
     score = min(max(float(score), 0.0), 1.0)
-    
+    success = score >= SUCCESS_SCORE_THRESHOLD
+
     rewards_str = ",".join(f"{r.value:.2f}" for r in rewards)
-    success = score >= 1.0
     print(
         f"[END] success={str(success).lower()} steps={step_num} "
         f"score={score:.2f} rewards={rewards_str}",
