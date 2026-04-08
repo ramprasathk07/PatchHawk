@@ -1,3 +1,13 @@
+---
+title: PatchHawk
+emoji: 🦅
+colorFrom: gray
+colorTo: yellow
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # 🦅 PatchHawk: Autonomous Supply-Chain Guard
 
 [![W&B](https://img.shields.io/badge/W%26B-patchhawk-blue?logo=weightsandbiases)](https://wandb.ai/ramprasathk07/patchhawk)
